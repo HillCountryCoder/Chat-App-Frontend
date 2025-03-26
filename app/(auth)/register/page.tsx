@@ -19,12 +19,15 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getPasswordStrength } from "@/utils/passwordStrength";
+import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
 
 export default function RegisterPage() {
   const router = useRouter();
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const register = useRegister();
+  const [passwordStrength, setPasswordStrength] = useState(0);
 
   const form = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
@@ -50,7 +53,9 @@ export default function RegisterPage() {
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
   };
-
+  const handlePasswordChange = (value: string) => {
+    setPasswordStrength(getPasswordStrength(value));
+  };
   return (
     <>
       <div className="mb-8 text-center">
@@ -129,6 +134,10 @@ export default function RegisterPage() {
                       type={showPassword ? "text" : "password"}
                       {...field}
                       className="pr-10"
+                      onChange={(e) => {
+                        field.onChange(e);
+                        handlePasswordChange(e.target.value);
+                      }}
                     />
                     <button
                       type="button"
@@ -144,6 +153,9 @@ export default function RegisterPage() {
                   </div>
                 </FormControl>
                 <FormMessage />
+                <div className="mt-2">
+                  <PasswordStrengthMeter strength={passwordStrength} />
+                </div>
               </FormItem>
             )}
           />

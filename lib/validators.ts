@@ -11,10 +11,12 @@ export const registerSchema = z.object({
     ),
   password: z
     .string()
-    .min(8, "Password must be at least 8 characters long")
-    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .min(6, "Password must be at least 6 characters long")
+    .max(20, "Password can be at max 20 characters long")
     .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-    .regex(/[0-9]/, "Password must contain at least one number"),
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(/[\W_]/, "Password must contain at least one special character"),
   firstName: z.string().min(3, "First name is required"),
   lastName: z.string().optional(),
 });
@@ -24,7 +26,7 @@ export const loginSchema = z
     // Allow either email or username, but at least one must be provided
     email: z.string().email("Invalid email address").optional(),
     username: z.string().optional(),
-    password: z.string().min(8, "Password is required"),
+    password: z.string().min(6, "Password is required"), 
   })
   .refine((data) => data.email || data.username, {
     message: "Either email or username must be provided",
