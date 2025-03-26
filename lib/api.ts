@@ -1,6 +1,5 @@
 import axios from "axios";
 import { useAuthStore } from "@/store/auth-store";
-import { redirect } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api";
 
@@ -24,7 +23,6 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       useAuthStore.getState().actions.logout();
-      redirect("/login")
     }
     return Promise.reject(error);
   },
