@@ -9,7 +9,7 @@ import { RegisterFormData, registerSchema } from "@/lib/validators";
 import { useRegister } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import {
   Form,
   FormControl,
@@ -19,9 +19,10 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ApiErrorDisplay } from "@/components/api-error";
 import { getPasswordStrength } from "@/utils/passwordStrength";
 import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
-import { ApiErrorDisplay } from "@/components/api-error";
+import { ErrorCodes } from "@/lib/errors";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -44,9 +45,9 @@ export default function RegisterPage() {
   const onSubmit = async (data: RegisterFormData) => {
     try {
       await register.mutateAsync(data);
-      router.push("/"); // Redirect to home page after successful registration
+      router.push("/");
     } catch (error) {
-      // Error is handled by the mutation
+      // Error is handled by the mutation and will be available in register.error
       console.error("Registration failed", error);
     }
   };
@@ -54,14 +55,41 @@ export default function RegisterPage() {
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
   };
+
   const handlePasswordChange = (value: string) => {
     setPasswordStrength(getPasswordStrength(value));
   };
+
+  // Define custom error actions for specific error types
+  const getErrorActions = () => {
+    if (!register.error) return null;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((register.error as any).code === ErrorCodes.CONFLICT) {
+      return (
+        <Button variant="outline" size="sm" asChild className="mt-2">
+          <Link href="/login">Go to Login</Link>
+        </Button>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <>
       <div className="mb-8 text-center">
         <h1 className="text-2xl font-bold text-foreground">Create Account</h1>
       </div>
+
+      {/* Display API errors */}
+      {register.error && (
+        <ApiErrorDisplay
+          error={register.error}
+          className="mb-4"
+          actions={getErrorActions()}
+        />
+      )}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -73,7 +101,7 @@ export default function RegisterPage() {
                 <FormItem>
                   <FormLabel>First Name</FormLabel>
                   <FormControl>
-                    <Input {...field} />
+                    <Input {...field} autoComplete="given-name" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -87,7 +115,7 @@ export default function RegisterPage() {
                 <FormItem>
                   <FormLabel>Last Name</FormLabel>
                   <FormControl>
-                    <Input {...field} />
+                    <Input {...field} autoComplete="family-name" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -102,7 +130,7 @@ export default function RegisterPage() {
               <FormItem>
                 <FormLabel>Email Address</FormLabel>
                 <FormControl>
-                  <Input type="email" {...field} />
+                  <Input type="email" {...field} autoComplete="email" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -116,7 +144,7 @@ export default function RegisterPage() {
               <FormItem>
                 <FormLabel>Username</FormLabel>
                 <FormControl>
-                  <Input {...field} />
+                  <Input {...field} autoComplete="username" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -139,11 +167,16 @@ export default function RegisterPage() {
                         field.onChange(e);
                         handlePasswordChange(e.target.value);
                       }}
+                      autoComplete="new-password"
                     />
                     <button
                       type="button"
                       className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
                       onClick={togglePasswordVisibility}
+                      tabIndex={-1}
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
                     >
                       {showPassword ? (
                         <EyeOff size={16} className="text-muted-foreground" />
@@ -161,8 +194,6 @@ export default function RegisterPage() {
             )}
           />
 
-          {register.error && <ApiErrorDisplay error={register.error} />}
-
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -177,12 +208,6 @@ export default function RegisterPage() {
                 Remember me
               </label>
             </div>
-            <Link
-              href="/forgot-password"
-              className="text-sm text-primary hover:underline"
-            >
-              Forgot password?
-            </Link>
           </div>
 
           <Button
@@ -191,12 +216,18 @@ export default function RegisterPage() {
             disabled={
               form.formState.isSubmitting ||
               register.isPending ||
-              form.formState.isDirty === false
+              !form.formState.isDirty ||
+              passwordStrength < 3 // Require at least a "fair" password
             }
           >
-            {form.formState.isSubmitting || register.isPending
-              ? "Creating Account..."
-              : "CREATE ACCOUNT"}
+            {register.isPending ? (
+              <div className="flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Creating Account...</span>
+              </div>
+            ) : (
+              "CREATE ACCOUNT"
+            )}
           </Button>
         </form>
       </Form>
