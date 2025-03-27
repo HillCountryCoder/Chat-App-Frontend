@@ -26,17 +26,32 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const login = useLogin();
+
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       email: "",
+      username: "",
       password: "",
     },
   });
 
   const onSubmit = async (data: LoginFormData) => {
     try {
-      await login.mutateAsync(data);
+      // Make sure we're sending the right data structure based on input
+      const loginData: LoginFormData = {
+        password: data.password,
+      };
+
+      // Determine if input is email or username based on format
+      const inputValue = data.email || data.username || "";
+      if (inputValue.includes("@")) {
+        loginData.email = inputValue;
+      } else {
+        loginData.username = inputValue;
+      }
+
+      await login.mutateAsync(loginData);
       router.push("/");
     } catch (error) {
       // Error is handled by the mutation
@@ -132,14 +147,13 @@ export default function LoginPage() {
             type="submit"
             className="w-full"
             variant="default"
-            disabled={
-              form.formState.isSubmitting ||
-              login.isPending ||
-              form.formState.isDirty === false
-            }
+            disabled={form.formState.isSubmitting || login.isPending}
           >
             {form.formState.isSubmitting || login.isPending ? (
-              <Loader2 className="animate-spin w-3 h-3" />
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Logging in...
+              </span>
             ) : (
               "LOG IN"
             )}

@@ -5,35 +5,35 @@ import { useAuthStore } from "@/store/auth-store";
 import { LoginFormData, RegisterFormData } from "@/lib/validators";
 // import { connectSocket } from "@/lib/socket";
 import Cookies from "js-cookie";
+
 export function useLogin() {
   const { actions } = useAuthStore();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (data: LoginFormData) => {
-      try {
-        const response = await api.post("/auth/login", data);
-        return response.data;
-      } catch (error) {
-        // Rethrow the error to be handled by onError
-        throw error;
+      const loginData: Record<string, string> = {
+        password: data.password,
+      };
+
+      if (data.email) {
+        loginData.email = data.email;
+      } else if (data.username) {
+        loginData.username = data.username;
       }
+
+      const response = await api.post("/auth/login", loginData);
+      return response.data;
     },
     onSuccess: (data) => {
-      // Store token in cookie - accessible to middleware
       Cookies.set("token", data.token, {
         expires: 7, // 7 days
         path: "/",
         sameSite: "strict",
       });
 
-      // Also store in Zustand for client-side usage
       actions.login(data.user, data.token);
 
-      // Connect to the WebSocket
-      //   connectSocket();
-
-      // Invalidate any queries that might depend on authentication
       queryClient.invalidateQueries({ queryKey: ["user"] });
     },
   });
