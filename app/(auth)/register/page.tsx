@@ -21,6 +21,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { getPasswordStrength } from "@/utils/passwordStrength";
 import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
+import { ApiErrorDisplay } from "@/components/api-error";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -160,12 +161,7 @@ export default function RegisterPage() {
             )}
           />
 
-          {register.error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              {register.error.message ||
-                "Registration failed. Please try again."}
-            </div>
-          )}
+          {register.error && <ApiErrorDisplay error={register.error} />}
 
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -192,7 +188,11 @@ export default function RegisterPage() {
           <Button
             type="submit"
             className="w-full"
-            disabled={form.formState.isSubmitting || register.isPending}
+            disabled={
+              form.formState.isSubmitting ||
+              register.isPending ||
+              form.formState.isDirty === false
+            }
           >
             {form.formState.isSubmitting || register.isPending
               ? "Creating Account..."

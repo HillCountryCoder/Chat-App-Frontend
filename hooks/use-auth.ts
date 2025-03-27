@@ -11,8 +11,13 @@ export function useLogin() {
 
   return useMutation({
     mutationFn: async (data: LoginFormData) => {
-      const response = await api.post("/auth/login", data);
-      return response.data;
+      try {
+        const response = await api.post("/auth/login", data);
+        return response.data;
+      } catch (error) {
+        // Rethrow the error to be handled by onError
+        throw error;
+      }
     },
     onSuccess: (data) => {
       // Store token in cookie - accessible to middleware

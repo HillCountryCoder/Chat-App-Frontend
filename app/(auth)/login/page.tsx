@@ -9,7 +9,7 @@ import { LoginFormData, loginSchema } from "@/lib/validators";
 import { useLogin } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import {
   Form,
   FormControl,
@@ -19,13 +19,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ApiErrorDisplay } from "@/components/api-error";
 
 export default function LoginPage() {
   const router = useRouter();
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const login = useLogin();
-
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -37,7 +37,7 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormData) => {
     try {
       await login.mutateAsync(data);
-      router.push("/"); // Redirect to home page after successful login
+      router.push("/");
     } catch (error) {
       // Error is handled by the mutation
       console.error("Login failed", error);
@@ -104,12 +104,7 @@ export default function LoginPage() {
             )}
           />
 
-          {login.error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              {login.error.message ||
-                "Login failed. Please check your credentials."}
-            </div>
-          )}
+          {login.error && <ApiErrorDisplay error={login.error} />}
 
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -137,11 +132,17 @@ export default function LoginPage() {
             type="submit"
             className="w-full"
             variant="default"
-            disabled={form.formState.isSubmitting || login.isPending}
+            disabled={
+              form.formState.isSubmitting ||
+              login.isPending ||
+              form.formState.isDirty === false
+            }
           >
-            {form.formState.isSubmitting || login.isPending
-              ? "Logging in..."
-              : "LOG IN"}
+            {form.formState.isSubmitting || login.isPending ? (
+              <Loader2 className="animate-spin w-3 h-3" />
+            ) : (
+              "LOG IN"
+            )}
           </Button>
         </form>
       </Form>
