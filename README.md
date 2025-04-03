@@ -1,36 +1,166 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Chat Application
 
-## Getting Started
+This provides comprehensive details about the documentation for the application different architecture explanations and stuff.
 
-First, run the development server:
+## Table of Content 
+[Error Handling](#error-handling-system)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Error Handling System
+
+This document explains the comprehensive error handling system implemented in our frontend application.
+
+### Overview
+
+The error handling system provides a consistent way to handle errors across the application. It includes:
+
+1. **Error Types & Classes**: Mirrors backend error structure for consistency
+2. **API Client Integration**: Automatic error transformation and handling
+3. **UI Components**: Reusable error display components
+4. **Context Provider**: Global error management
+5. **Helper Hooks**: For simplified error handling in components
+
+#### Key Components
+
+#### Error Types & Classes
+
+- **BaseError**: Abstract base class for all errors
+- **Specific Error Classes**: NotFoundError, ValidationError, etc.
+- **Error Factory**: Functions to create appropriate error instances
+
+#### API Client
+
+- **Error Interceptors**: Transforms API errors into our error types
+- **Typed Responses**: Better type safety for API requests
+
+#### UI Components
+
+- **ApiErrorDisplay**: Reusable component for displaying errors
+- **ErrorBoundary**: Catches and displays errors in component trees
+
+#### Context & Providers
+
+- **ErrorProvider**: Manages global errors and provides error handling utilities
+- **useError Hook**: Simplified access to error handling functions
+
+#### Helper Hooks
+
+- **useAsync**: Hook for handling async operations with error handling
+- **withErrorHandling**: HOF for wrapping functions with error handling
+
+### Usage Examples
+
+#### Handling API Errors
+
+```tsx
+// Using the API client with error handling
+import { apiClient } from "@/lib/api";
+import { useError } from "@/providers/error-provider";
+
+function UserProfile() {
+  const { handleError } = useError();
+
+  async function fetchUserData() {
+    try {
+      const user = await apiClient.get("/users/me");
+      return user;
+    } catch (error) {
+      // Error is already transformed to a BaseError
+      handleError(error, { showToast: true });
+      return null;
+    }
+  }
+
+  // ...
+}
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+#### Using useAsync Hook
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```tsx
+import { useAsync } from "@/hooks/use-async";
+import { apiClient } from "@/lib/api";
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+function UserProfile() {
+  const {
+    execute: fetchUser,
+    data: user,
+    isLoading,
+    error,
+  } = useAsync(() => apiClient.get("/users/me"), {
+    showErrorToast: true,
+    autoRun: true,
+  });
 
-## Learn More
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <ApiErrorDisplay error={error} />;
 
-To learn more about Next.js, take a look at the following resources:
+  return (
+    <div>
+      <h1>Welcome, {user?.name}</h1>
+      {/* ... */}
+    </div>
+  );
+}
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+#### Form Handling
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```tsx
+import { apiClient } from "@/lib/api";
+import { ApiErrorDisplay } from "@/components/ui/api-error";
+import { useState } from "react";
 
-## Deploy on Vercel
+function LoginForm() {
+  const [error, setError] = useState(null);
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+  const handleSubmit = async (data) => {
+    try {
+      await apiClient.post("/auth/login", data);
+      // Success handling
+    } catch (error) {
+      // Set the error for display in the form
+      setError(error);
+    }
+  };
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+  return (
+    <form onSubmit={handleFormSubmit}>
+      {/* Form fields */}
+
+      {error && <ApiErrorDisplay error={error} />}
+
+      <button type="submit">Login</button>
+    </form>
+  );
+}
+```
+
+### Best Practices
+
+1. **Use the API client** for all API requests to ensure consistent error handling
+2. **Prefer useAsync or withErrorHandling** for simplified error handling
+3. **For form errors**, display them inline using the ApiErrorDisplay component
+4. **For unexpected errors**, use the ErrorBoundary component
+5. **For global notifications**, use the ErrorProvider's setGlobalError function
+
+### Error Code Mapping
+
+The system maps error codes to appropriate UI treatments:
+
+| Error Code            | Toast | Inline Display | Default Action     |
+| --------------------- | ----- | -------------- | ------------------ |
+| VALIDATION_ERROR      | No    | Yes            | Show field errors  |
+| NOT_FOUND             | No    | Yes            | Show 404 message   |
+| UNAUTHORIZED          | No    | Yes            | Redirect to login  |
+| FORBIDDEN             | No    | Yes            | Show access denied |
+| NETWORK_ERROR         | Yes   | Optional       | Retry option       |
+| INTERNAL_SERVER_ERROR | Yes   | Optional       | Contact support    |
+
+### Extending the System
+
+To add new error types:
+
+1. Add the error code to `ErrorCodes` in `types.ts`
+2. Create a new error class extending `BaseError`
+3. Add the error handling logic to `factory.ts`
+4. Update UI components if needed
