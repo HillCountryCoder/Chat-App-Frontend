@@ -1,11 +1,14 @@
-"use client";
+import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import QueryProvider from "@/providers/query-provider";
 import { SocketProvider } from "@/providers/socket-provider";
+import { Toaster } from "sonner";
+import { ErrorBoundary } from "@/components/error-boundary";
 import "./globals.css";
-import { ThemeProvider } from "@/providers/theme-proivder";
+import { ErrorProvider } from "@/providers/error-providers";
+import { ThemeProvider } from "@/providers/theme-provider";
 import Navbar from "@/components/Navbar";
-import { useAuthPersistence } from "@/hooks/use-auth-persistence";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -16,30 +19,39 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const metadata: Metadata = {
+  title: "Chat Application",
+  description: "Real-time chat application",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  useAuthPersistence();
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background dark:bg-background`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <QueryProvider>
-            <SocketProvider>
-              <Navbar />
-              {children}
-            </SocketProvider>
-          </QueryProvider>
-        </ThemeProvider>
+        <ErrorBoundary>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <QueryProvider>
+              <ErrorProvider>
+                <SocketProvider>
+                  <Navbar />
+                  {children}
+                  <Toaster richColors position="top-right" />
+                </SocketProvider>
+              </ErrorProvider>
+            </QueryProvider>
+          </ThemeProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );
