@@ -9,6 +9,7 @@ export const initializeSocket = (): Socket => {
   if (!socket) {
     const token = useAuthStore.getState().token;
     socket = io(SOCKET_URL, {
+      path: process.env.NEXT_PUBLIC_SOCKET_PATH || "/socket.io",
       autoConnect: false,
       withCredentials: true,
       auth: { token },
