@@ -155,12 +155,13 @@ export default function ChatWindow({
           </div>
         ) : (
           <>
-            {messages.map((message, index) => {
+            {/* Reverse the messages array to show oldest first */}
+            {[...messages].reverse().map((message, index, reversedArray) => {
               // Check if we need to display a date separator
               const showDateSeparator =
                 index === 0 ||
                 !isSameDay(
-                  new Date(messages[index - 1].createdAt),
+                  new Date(reversedArray[index - 1].createdAt),
                   new Date(message.createdAt),
                 );
 
