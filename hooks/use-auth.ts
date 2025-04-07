@@ -1,6 +1,6 @@
 // src/hooks/use-auth.ts
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, apiClient } from "@/lib/api";
 import { useAuthStore } from "@/store/auth-store";
 import { LoginFormData, RegisterFormData } from "@/lib/validators";
 import Cookies from "js-cookie";
@@ -91,5 +91,17 @@ export function useLogout() {
       // Clear any user-specific cached queries
       queryClient.clear();
     },
+  });
+}
+
+export function useUser() {
+  return useQuery({
+    queryKey: ["user"],
+    queryFn: async () => {
+      const { data } = await api.get("/auth/me");
+      return data.user;
+    },
+    // Only fetch user data if we're authenticated
+    enabled: !!useAuthStore.getState().isAuthenticated,
   });
 }
