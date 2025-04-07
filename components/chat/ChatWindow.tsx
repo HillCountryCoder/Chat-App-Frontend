@@ -140,7 +140,7 @@ export default function ChatWindow({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 bg-background">
         {messagesLoading ? (
           <div className="flex justify-center items-center h-full">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -170,7 +170,7 @@ export default function ChatWindow({
                   {showDateSeparator && (
                     <MessageDate date={message.createdAt} />
                   )}
-                  <ChatMessage message={message} />
+                  <ChatMessage message={message} recipient={recipient} />
                 </Fragment>
               );
             })}
