@@ -30,4 +30,5 @@ export interface DirectMessage {
   _id: string;
   participantIds: string[];
   lastActivity: string;
+  lastMessage: Message | null;
 }
