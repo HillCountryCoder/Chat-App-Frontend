@@ -121,10 +121,9 @@ export function useUsers(searchQuery: string = "") {
   return useQuery({
     queryKey: ["users", searchQuery],
     queryFn: async () => {
-      const { data } = await api.get("/users", {
-        params: searchQuery ? { search: searchQuery } : undefined,
-      });
-      return data as User[];
+      const params = searchQuery ? { search: searchQuery } : undefined;
+      const { data } = await api.get("/users", { params });
+      return data.users;
     },
   });
 }

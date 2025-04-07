@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Search, MessageSquare, Loader2 } from "lucide-react";
 import { debounce } from "lodash";
 import { Skeleton } from "@/components/ui/skeleton";
+import { User } from "@/types/user";
 
 export default function NewChatPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -22,7 +23,7 @@ export default function NewChatPage() {
   const sendMessage = useSendMessage();
 
   // Filter out current user
-  const filteredUsers = users.filter((u) => u._id !== currentUser?._id);
+  const filteredUsers = users.filter((u: User) => u._id !== currentUser?._id);
 
   const handleSearch = debounce((value: string) => {
     setSearchQuery(value);
@@ -80,7 +81,7 @@ export default function NewChatPage() {
         </div>
       ) : (
         <div className="space-y-1">
-          {filteredUsers.map((user) => (
+          {filteredUsers.map((user: User) => (
             <div
               key={user._id}
               className="flex items-center justify-between p-3 rounded-lg hover:bg-accent"
