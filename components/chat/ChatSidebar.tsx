@@ -1,4 +1,4 @@
-// components/chat/ChatSidebar.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState } from "react";
@@ -6,7 +6,17 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/auth-store";
-import { PlusCircle, Home, AtSign, Star, MessageSquare, Users, ChevronDown, ChevronRight } from "lucide-react";
+import { useDirectMessages } from "@/hooks/use-chat";
+import {
+  PlusCircle,
+  Home,
+  AtSign,
+  Star,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function ChatSidebar() {
   const [shortcutsOpen, setShortcutsOpen] = useState(true);
@@ -14,23 +24,34 @@ export default function ChatSidebar() {
   const [groupsOpen, setGroupsOpen] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
+  const { user } = useAuthStore();
+
+  const { data: directMessages, isLoading: loadingDMs } = useDirectMessages();
 
   const toggleShortcuts = () => setShortcutsOpen(!shortcutsOpen);
   const toggleDirectMessages = () => setDirectMessagesOpen(!directMessagesOpen);
   const toggleGroups = () => setGroupsOpen(!groupsOpen);
 
-  // TODO: Replace with actual data from API
-  const directMessages = [
-    { id: "1", name: "Alice Hayden", hasUnread: true },
-    { id: "2", name: "John Doe", hasUnread: false },
-    { id: "3", name: "Jane Smith", hasUnread: false },
-  ];
-
+  // Static data for groups (could be another React Query hook in a real app)
   const groups = [
     { id: "1", name: "Product Design Team", icon: "P" },
     { id: "2", name: "Developers", icon: "D" },
     { id: "3", name: "Graphics", icon: "G" },
   ];
+
+  // Helper function to get other participant's info
+  const getOtherParticipant = (dm: any) => {
+    if (!user || !dm.participants) return { name: "Unknown", initial: "?" };
+
+    const otherParticipant = dm.participants.find(
+      (p: any) => p._id !== user._id,
+    );
+    return {
+      name: otherParticipant?.displayName || "Unknown User",
+      initial: otherParticipant?.displayName?.charAt(0) || "?",
+      hasUnread: false, // This would come from the backend in a real app
+    };
+  };
 
   return (
     <div className="w-64 border-r border-border flex flex-col h-full bg-card">
@@ -106,23 +127,47 @@ export default function ChatSidebar() {
 
           {directMessagesOpen && (
             <div className="ml-2">
-              {directMessages.map((dm) => (
-                <Link
-                  key={dm.id}
-                  href={`/chat/dm/${dm.id}`}
-                  className={`flex items-center gap-2 p-2 rounded-md hover:bg-accent ${
-                    pathname === `/chat/dm/${dm.id}` ? "bg-accent" : ""
-                  }`}
-                >
-                  <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-white text-xs">
-                    {dm.name.charAt(0)}
-                  </div>
-                  <span className="text-sm">{dm.name}</span>
-                  {dm.hasUnread && (
-                    <div className="ml-auto w-2 h-2 rounded-full bg-primary"></div>
-                  )}
-                </Link>
-              ))}
+              {loadingDMs ? (
+                // Loading state
+                Array(3)
+                  .fill(0)
+                  .map((_, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2">
+                      <Skeleton className="h-6 w-6 rounded-full" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                  ))
+              ) : directMessages && directMessages.length > 0 ? (
+                // Render direct messages
+                directMessages.map((dm: any) => {
+                  const otherUser = getOtherParticipant(dm);
+                  return (
+                    <Link
+                      key={dm._id}
+                      href={`/chat/dm/${dm._id}`}
+                      className={`flex items-center gap-2 p-2 rounded-md hover:bg-accent ${
+                        pathname === `/chat/dm/${dm._id}` ? "bg-accent" : ""
+                      }`}
+                    >
+                      <Avatar className="h-6 w-6">
+                        <AvatarImage src="" alt={otherUser.name} />
+                        <AvatarFallback className="text-xs">
+                          {otherUser.initial}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm">{otherUser.name}</span>
+                      {otherUser.hasUnread && (
+                        <div className="ml-auto w-2 h-2 rounded-full bg-primary"></div>
+                      )}
+                    </Link>
+                  );
+                })
+              ) : (
+                // No direct messages
+                <div className="p-2 text-sm text-muted-foreground">
+                  No conversations yet
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -132,7 +177,11 @@ export default function ChatSidebar() {
             className="flex items-center gap-2 p-2 w-full hover:bg-accent rounded-md"
             onClick={toggleGroups}
           >
-            {groupsOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            {groupsOpen ? (
+              <ChevronDown size={16} />
+            ) : (
+              <ChevronRight size={16} />
+            )}
             <span className="text-sm font-medium">Groups</span>
           </button>
 
