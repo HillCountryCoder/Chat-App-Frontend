@@ -1,4 +1,3 @@
-// components/chat/ChatWindow.tsx
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";

@@ -1,4 +1,3 @@
-// components/chat/ChatMessage.tsx
 import { Message } from "@/types/chat";
 import { useAuthStore } from "@/store/auth-store";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
