@@ -7,7 +7,6 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import "./globals.css";
 import { ErrorProvider } from "@/providers/error-providers";
 import { ThemeProvider } from "@/providers/theme-provider";
-import Navbar from "@/components/Navbar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -44,7 +43,6 @@ export default function RootLayout({
             <QueryProvider>
               <ErrorProvider>
                 <SocketProvider>
-                  <Navbar />
                   {children}
                   <Toaster richColors position="top-right" />
                 </SocketProvider>
