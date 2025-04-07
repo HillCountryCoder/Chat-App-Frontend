@@ -1,20 +1,17 @@
+import { User } from "./user";
+
 // types/chat.ts
 export interface Message {
   _id: string;
   messageId: string;
-  senderId: string;
+  senderId: string | User; // Can be either a string ID or populated User object from MongoDB
   channelId?: string;
   directMessageId?: string;
   content: string;
   contentType: string;
   createdAt: string;
   isEdited: boolean;
-  sender?: {
-    _id: string;
-    username: string;
-    displayName: string;
-    avatarUrl?: string;
-  };
+  sender?: User; // For backward compatibility
 }
 
 export interface Channel {

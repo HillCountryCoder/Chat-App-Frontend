@@ -33,6 +33,11 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
+  /* Chat Colors */
+  --color-chat-message-bg: var(--primary-chat);
+  --color-chat-message-fg: var(--primary-foreground-chat);
+  --color-muted-chat-bg: var(--muted-chat);
+  --color-muted-chat-fg: var(--muted-foreground-chat);
   /* Chart colors */
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -76,6 +81,10 @@
 
 @layer base {
   :root {
+    --primary-chat: hsl(215 100% 50%);
+    --primary-foreground-chat: hsl(0 0% 100%);
+    --muted-chat: hsl(0 0% 96%);
+    --muted-foreground-chat: hsl(0 0% 45%);
     /* Base variables */
     --radius: 0.625rem;
     --background: oklch(1 0 0);
@@ -132,6 +141,10 @@
   }
 
   .dark {
+    --primary-chat: hsl(215 100% 50%);
+    --primary-foreground-chat: hsl(0 0% 100%);
+    --muted-chat: hsl(0 0% 20%);
+    --muted-foreground-chat: hsl(0 0% 65%);
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.205 0 0);

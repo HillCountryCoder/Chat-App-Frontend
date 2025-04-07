@@ -7,41 +7,61 @@ import { format } from "date-fns";
 import { Check } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { User } from "@/types/user";
 
 interface ChatMessageProps {
   message: Message;
-  recipient?: any; // Pass recipient from parent component
+  recipient?: User; // Pass recipient from parent component
 }
 
 export default function ChatMessage({ message, recipient }: ChatMessageProps) {
   const { user: currentUser } = useAuthStore();
-  const isOwnMessage = message.senderId === currentUser?._id;
 
-  // If not own message and no sender info, fetch the sender
+  // Handle both cases: when senderId is a string or an object (populated by MongoDB)
+  const senderIdValue =
+    typeof message.senderId === "object"
+      ? (message.senderId as unknown as User)._id
+      : message.senderId;
+
+  // Get sender data from populated field if available
+  const senderData =
+    typeof message.senderId === "object"
+      ? (message.senderId as unknown as User)
+      : message.sender;
+
+  const isOwnMessage = senderIdValue === currentUser?._id;
+
+  // Only fetch if we don't already have sender data
   const { data: sender } = useQuery({
-    queryKey: ["user", message.senderId],
+    queryKey: ["user", senderIdValue],
     queryFn: async () => {
       // Don't fetch if it's the current user's message
       if (isOwnMessage) return currentUser;
 
+      // If we already have sender data from the populated field, use that
+      if (senderData) return senderData;
+
       // If sender is the recipient, use that data
-      if (recipient && recipient._id === message.senderId) {
+      if (recipient && recipient._id === senderIdValue) {
         return recipient;
       }
 
       // Otherwise fetch the user data
-      const { data } = await api.get(`/users/${message.senderId}`);
+      const { data } = await api.get(`/users/${senderIdValue}`);
       return data;
     },
     // Only fetch if needed and if we have an ID
     enabled:
-      !!message.senderId &&
+      !!senderIdValue &&
+      !senderData &&
       !isOwnMessage &&
-      (!recipient || recipient._id !== message.senderId),
+      (!recipient || recipient._id !== senderIdValue),
   });
 
   // Determine which user data to use
-  const messageUser = isOwnMessage ? currentUser : sender || recipient;
+  const messageUser = isOwnMessage
+    ? currentUser
+    : senderData || sender || recipient;
 
   return (
     <div
@@ -72,7 +92,7 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
           className={cn(
             "px-4 py-2 rounded-2xl",
             isOwnMessage
-              ? "bg-primary text-primary-foreground rounded-br-none"
+              ? "bg-chat-message-bg text-chat-message-fg rounded-br-none"
               : "bg-muted text-foreground rounded-bl-none",
           )}
         >
@@ -81,7 +101,7 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
 
         <div
           className={cn(
-            "flex items-center mt-1 text-xs text-muted-foreground",
+            "flex items-center mt-1 text-xs text-muted-chat-fg",
             isOwnMessage ? "justify-end" : "justify-start",
           )}
         >
