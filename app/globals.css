@@ -66,6 +66,12 @@
 
   /* Shadow variables */
   --shadow-box-shadow-first: 0px 1px 0px var(--shadow-color);
+
+  /* You can also add these as additional variables */
+  --color-activity-indicator-bg: var(--success-bg);
+  --color-activity-indicator-fg: var(--success-fg);
+  --color-activity-text: var(--success-fg);
+  --color-activity-icon: var(--success-fg);
 }
 
 @layer base {
@@ -114,6 +120,15 @@
     --shadow-color: rgba(55, 53, 47, 0.09);
     --hover-background: rgba(55, 53, 47, 0.06);
     --active-background: rgba(55, 53, 47, 0.16);
+
+    /* Success/Activity colors */
+    --success-bg: hsla(132, 66%, 86%, 1); /* Light green background */
+    --success-fg: hsla(
+      125,
+      31%,
+      34%,
+      1
+    ); /* Darker green for text, icons, and indicators */
   }
 
   .dark {
@@ -157,5 +172,18 @@
     --shadow-color: rgba(255, 255, 255, 0.094);
     --hover-background: rgba(255, 255, 255, 0.055);
     --active-background: rgba(255, 255, 255, 0.03);
+
+    --success-bg: hsla(
+      132,
+      60%,
+      20%,
+      1
+    ); /* Darker green background for dark mode */
+    --success-fg: hsla(
+      125,
+      70%,
+      80%,
+      1
+    ); /* Lighter green for text in dark mode */
   }
 }

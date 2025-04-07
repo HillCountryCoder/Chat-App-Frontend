@@ -1,14 +1,19 @@
-// app/(main)/layout.tsx
-import React from "react";
+import { ReactNode } from "react";
+import ChatSidebar from "@/components/chat/ChatSidebar";
+import TopBar from "@/components/chat/TopBar";
 
-export default function MainLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+interface ChatLayoutProps {
+  children: ReactNode;
+}
+
+export default function ChatLayout({ children }: ChatLayoutProps) {
   return (
-    <div className="bg-background min-h-screen">
-      {children}
+    <div className="flex h-screen bg-background">
+      <ChatSidebar />
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <TopBar />
+        <main className="flex-1 overflow-auto">{children}</main>
+      </div>
     </div>
   );
 }
