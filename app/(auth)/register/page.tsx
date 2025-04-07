@@ -45,7 +45,7 @@ export default function RegisterPage() {
   const onSubmit = async (data: RegisterFormData) => {
     try {
       await register.mutateAsync(data);
-      router.push("/");
+      router.push("/chat");
     } catch (error) {
       // Error is handled by the mutation and will be available in register.error
       console.error("Registration failed", error);

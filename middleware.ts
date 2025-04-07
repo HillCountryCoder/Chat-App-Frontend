@@ -40,7 +40,7 @@ export function middleware(request: NextRequest) {
   // If authenticated and trying to access auth routes
   if (isAuthenticated && authRoutes.some((route) => pathname === route)) {
     console.log("Redirecting authenticated user from:", pathname);
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(new URL("/chat", request.url));
   }
 
   return NextResponse.next();

@@ -39,7 +39,7 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormData) => {
     try {
       await login.mutateAsync(data);
-      router.push("/");
+      router.push("/chat");
     } catch (error) {
       // Error is handled by the mutation and will be available in login.error
       console.error("Login failed", error);
