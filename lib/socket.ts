@@ -8,6 +8,7 @@ let socket: Socket | null = null;
 export const initializeSocket = (): Socket => {
   if (!socket) {
     const token = useAuthStore.getState().token;
+    console.log("token", token);
     socket = io(SOCKET_URL, {
       path: process.env.NEXT_PUBLIC_SOCKET_PATH || "/socket.io",
       autoConnect: false,
@@ -25,7 +26,12 @@ export const initializeSocket = (): Socket => {
   return socket;
 };
 
-export const connectSocket = (): Socket => {
+export const connectSocket = (): Socket | null => {
+  const token = useAuthStore.getState().token;
+  if (!token) {
+    console.warn("cannot connect socket: No Authentication token available");
+    return null;
+  }
   const socket = initializeSocket();
   if (!socket.connected) {
     socket.connect();
