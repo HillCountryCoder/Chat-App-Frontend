@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useDirectMessage, useRecipient } from "@/hooks/use-chat";
+import { useDirectMessage } from "@/hooks/use-chat";
 import { useAuthStore } from "@/store/auth-store";
 import ChatWindow from "@/components/chat/ChatWindow";
 import { Skeleton } from "@/components/ui/skeleton";
