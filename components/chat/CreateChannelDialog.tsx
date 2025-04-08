@@ -1,0 +1,215 @@
+"use client";
+
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useCreateChannel } from "@/hooks/use-channels";
+import { useUsers } from "@/hooks/use-chat";
+import { ChannelType } from "@/types/chat";
+import { useRouter } from "next/navigation";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { User } from "@/types/user";
+import { Loader2 } from "lucide-react";
+
+// Validation schema
+const createChannelSchema = z.object({
+  name: z
+    .string()
+    .min(2, "Name must be at least 2 characters")
+    .max(50, "Name cannot exceed 50 characters"),
+  description: z
+    .string()
+    .max(500, "Description cannot exceed 500 characters")
+    .optional(),
+  type: z.enum([ChannelType.TEXT, ChannelType.VOICE, ChannelType.ANNOUNCEMENT]),
+  memberIds: z.array(z.string()).max(99, "Cannot add more than 99 members"),
+});
+
+type CreateChannelFormData = z.infer<typeof createChannelSchema>;
+
+interface CreateChannelDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  spaceId: string;
+}
+
+export default function CreateChannelDialogProps({
+  isOpen,
+  onClose,
+  spaceId,
+}: CreateChannelDialogProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const router = useRouter();
+
+  const { data: users = [], isLoading: loadingUsers } = useUsers(searchQuery);
+  const createChannel = useCreateChannel();
+
+  const form = useForm<CreateChannelFormData>({
+    resolver: zodResolver(createChannelSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      type: ChannelType.TEXT,
+      memberIds: [],
+    },
+  });
+
+  const onSubmit = async (data: CreateChannelFormData) => {
+    try {
+      const result = await createChannel.mutateAsync({
+        ...data,
+        spaceId,
+      });
+
+      onClose();
+      router.push(`/chat/channel/${result.channel._id}`);
+    } catch (error) {
+      console.error("Failed to create channel:", error);
+    }
+  };
+  const userOptions = users.map((user: User) => ({
+    label: user.displayName,
+    value: user._id,
+    avatar: user.avatarUrl,
+  }));
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[550px]">
+        <DialogHeader>
+          <DialogTitle>Create New Channel</DialogTitle>
+          <DialogDescription>
+            Create a channel to communicate with your team members
+          </DialogDescription>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Channel Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. design-team" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description (Optional)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="What is this channel about?"
+                      className="resize-none"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Channel Type</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select channel type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value={ChannelType.TEXT}>Text</SelectItem>
+                      <SelectItem value={ChannelType.VOICE}>Voice</SelectItem>
+                      <SelectItem value={ChannelType.ANNOUNCEMENT}>
+                        Announcement
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="memberIds"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Add Members</FormLabel>
+                  <FormControl>
+                    <MultiSelect
+                      options={userOptions}
+                      selected={field.value}
+                      onChange={field.onChange}
+                      placeholder="Search users..."
+                      isLoading={loadingUsers}
+                      onSearch={(value) => setSearchQuery(value)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={createChannel.isPending}
+                className="gap-2"
+              >
+                {createChannel.isPending && (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                )}
+                Create Channel
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
