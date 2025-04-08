@@ -4,14 +4,20 @@ import { User } from "./user";
 export interface Message {
   _id: string;
   messageId: string;
-  senderId: string | User; // Can be either a string ID or populated User object from MongoDB
+  senderId: string;
   channelId?: string;
   directMessageId?: string;
   content: string;
   contentType: string;
   createdAt: string;
   isEdited: boolean;
-  sender?: User; // For backward compatibility
+  sender?: User;
+}
+
+export enum ChannelType {
+  TEXT = "text",
+  VOICE = "voice",
+  ANNOUNCEMENT = "announcement",
 }
 
 export interface Channel {
@@ -19,8 +25,19 @@ export interface Channel {
   spaceId: string;
   name: string;
   description?: string;
-  type: string;
+  type: ChannelType;
   isArchived: boolean;
+  createdAt: string;
+}
+
+export interface ChannelMember {
+  _id: string;
+  channelId: string;
+  userId: string;
+  permissions: string[];
+  joinedAt: string;
+  notificationPreference: string;
+  user?: User;
 }
 
 export interface DirectMessage {
@@ -28,4 +45,15 @@ export interface DirectMessage {
   participantIds: string[];
   lastActivity: string;
   lastMessage: Message | null;
+}
+
+export interface Space {
+  _id: string;
+  name: string;
+  description?: string;
+  creatorId: string;
+  avatarUrl?: string;
+  createdAt: string;
+  visibility: string;
+  type: string;
 }
