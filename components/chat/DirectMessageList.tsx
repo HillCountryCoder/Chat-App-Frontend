@@ -1,18 +1,15 @@
-// components/chat/DirectMessageList.tsx
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
 import { useDirectMessages } from "@/hooks/use-chat";
-import { useAuthStore } from "@/store/auth-store";
+import { useDirectMessageUsers } from "@/hooks/use-direct-message-users";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { User } from "@/types/user";
 import { DirectMessage, Message } from "@/types/chat";
 import { formatDistanceToNow } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MessageSquare } from "lucide-react";
 import { EmptyState } from "./EmptyState";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { useAuthStore } from "@/store/auth-store";
 
 export default function DirectMessageList() {
   const {
@@ -20,65 +17,16 @@ export default function DirectMessageList() {
     isLoading: loadingDMs,
     error: dmError,
   } = useDirectMessages();
-  const { user: currentUser } = useAuthStore();
+
+  const { getOtherParticipant, isLoading: loadingUsers } =
+    useDirectMessageUsers(directMessages);
+
   const router = useRouter();
   const pathname = usePathname();
-
-  // Extract all participant IDs that are not the current user
-  const otherParticipantIds = directMessages
-    ? directMessages.flatMap((dm) =>
-        dm.participantIds.filter((id) => id !== currentUser?._id),
-      )
-    : [];
-
-  // Fetch all the users for those IDs
-  const { data: usersData, isLoading: loadingUsers } = useQuery({
-    queryKey: ["users", "participants", otherParticipantIds],
-    queryFn: async () => {
-      if (otherParticipantIds.length === 0) return {};
-
-      // Get each user by ID
-      const userPromises = otherParticipantIds.map(async (userId) => {
-        try {
-          const { data } = await api.get(`/users/${userId}`);
-          return data;
-        } catch (error) {
-          console.error(`Failed to fetch user ${userId}:`, error);
-          return null;
-        }
-      });
-
-      const users = await Promise.all(userPromises);
-
-      // Create a map of user ID to user data
-      const userMap: Record<string, User> = {};
-      users.filter(Boolean).forEach((user) => {
-        if (user && user._id) {
-          userMap[user._id] = user;
-        }
-      });
-
-      return userMap;
-    },
-    enabled: otherParticipantIds.length > 0,
-  });
-
-  const userMap = usersData || {};
+  const { user: currentUser } = useAuthStore();
 
   const handleSelectChat = (dmId: string) => {
     router.push(`/chat/dm/${dmId}`);
-  };
-
-  // Function to get other participant's data
-  const getOtherParticipant = (dm: DirectMessage): User | undefined => {
-    if (!currentUser) return undefined;
-
-    const otherParticipantId = dm.participantIds.find(
-      (id) => id !== currentUser._id,
-    );
-    if (!otherParticipantId) return undefined;
-
-    return userMap[otherParticipantId];
   };
 
   // Function to determine if a message is from the current user
