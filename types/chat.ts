@@ -1,5 +1,3 @@
-import { User } from "./user";
-
 // types/chat.ts
 export interface Message {
   _id: string;
@@ -7,11 +5,18 @@ export interface Message {
   senderId: string;
   channelId?: string;
   directMessageId?: string;
+  threadId?: string;
+  isThreadStarter?: boolean;
   content: string;
   contentType: string;
   createdAt: string;
   isEdited: boolean;
-  sender?: User;
+  sender?: {
+    _id: string;
+    username: string;
+    displayName: string;
+    avatarUrl?: string;
+  };
 }
 
 export enum ChannelType {
@@ -20,11 +25,18 @@ export enum ChannelType {
   ANNOUNCEMENT = "announcement",
 }
 
+export enum MemberRole {
+  ADMIN = "admin",
+  MODERATOR = "moderator",
+  MEMBER = "member",
+}
+
 export interface Channel {
   _id: string;
-  spaceId: string;
   name: string;
   description?: string;
+  creatorId: string;
+  avatarUrl?: string;
   type: ChannelType;
   isArchived: boolean;
   createdAt: string;
@@ -34,26 +46,32 @@ export interface ChannelMember {
   _id: string;
   channelId: string;
   userId: string;
+  roles: MemberRole[];
   permissions: string[];
   joinedAt: string;
   notificationPreference: string;
-  user?: User;
+  user?: {
+    _id: string;
+    username: string;
+    displayName: string;
+    avatarUrl?: string;
+    status: string;
+  };
 }
 
 export interface DirectMessage {
   _id: string;
   participantIds: string[];
   lastActivity: string;
-  lastMessage: Message | null;
+  lastMessage?: Message;
 }
 
-export interface Space {
+export interface Thread {
   _id: string;
-  name: string;
-  description?: string;
-  creatorId: string;
-  avatarUrl?: string;
+  channelId: string;
+  parentMessageId: string;
+  title?: string;
   createdAt: string;
-  visibility: string;
-  type: string;
+  lastActivity: string;
+  participantIds: string[];
 }

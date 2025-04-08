@@ -23,12 +23,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DirectMessage } from "@/types/chat";
 import { ChannelType } from "@/types/chat";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import CreateChannelDialog from "./CreateChannelDialog";
 
 export default function ChatSidebar() {
@@ -50,9 +44,6 @@ export default function ChatSidebar() {
 
   const openCreateChannel = () => setIsCreateChannelOpen(true);
   const closeCreateChannel = () => setIsCreateChannelOpen(false);
-
-  // This is a temporary solution until we implement spaces
-  const tempSpaceId = "temp-space-id";
 
   const getChannelIcon = (type: ChannelType) => {
     switch (type) {
@@ -143,23 +134,15 @@ export default function ChatSidebar() {
               <span className="text-sm font-medium">Channels</span>
             </button>
 
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={openCreateChannel}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Create Channel</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={openCreateChannel}
+              title="Create Channel"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
           </div>
 
           {channelsOpen && (
@@ -267,7 +250,6 @@ export default function ChatSidebar() {
       <CreateChannelDialog
         isOpen={isCreateChannelOpen}
         onClose={closeCreateChannel}
-        spaceId={tempSpaceId}
       />
     </div>
   );
