@@ -60,11 +60,12 @@ interface CreateChannelDialogProps {
   spaceId: string;
 }
 
-export default function CreateChannelDialogProps({
+export default function CreateChannelDialog({
   isOpen,
   onClose,
   spaceId,
 }: CreateChannelDialogProps) {
+  console.log("Dialog was tried to open");
   const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
 
@@ -94,11 +95,13 @@ export default function CreateChannelDialogProps({
       console.error("Failed to create channel:", error);
     }
   };
+
   const userOptions = users.map((user: User) => ({
     label: user.displayName,
     value: user._id,
     avatar: user.avatarUrl,
   }));
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[550px]">

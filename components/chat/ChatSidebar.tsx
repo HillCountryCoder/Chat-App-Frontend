@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useDirectMessages } from "@/hooks/use-chat";
 import { useDirectMessageUsers } from "@/hooks/use-direct-message-users";
+import { useChannels } from "@/hooks/use-channels";
 import {
   PlusCircle,
   Home,
@@ -13,35 +14,60 @@ import {
   Star,
   ChevronDown,
   ChevronRight,
+  Hash,
+  Volume2,
+  Megaphone,
+  Plus,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DirectMessage } from "@/types/chat";
+import { ChannelType } from "@/types/chat";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import CreateChannelDialog from "./CreateChannelDialog";
 
 export default function ChatSidebar() {
   const [shortcutsOpen, setShortcutsOpen] = useState(true);
   const [directMessagesOpen, setDirectMessagesOpen] = useState(true);
-  const [groupsOpen, setGroupsOpen] = useState(true);
+  const [channelsOpen, setChannelsOpen] = useState(true);
+  const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
   const { data: directMessages, isLoading: loadingDMs } = useDirectMessages();
-  // Use our new hook
   const { getOtherParticipant, isLoading: loadingUsers } =
     useDirectMessageUsers(directMessages);
+  const { data: channels, isLoading: loadingChannels } = useChannels();
 
   const toggleShortcuts = () => setShortcutsOpen(!shortcutsOpen);
   const toggleDirectMessages = () => setDirectMessagesOpen(!directMessagesOpen);
-  const toggleGroups = () => setGroupsOpen(!groupsOpen);
+  const toggleChannels = () => setChannelsOpen(!channelsOpen);
 
-  // Static data for groups (could be another React Query hook in a real app)
-  const groups = [
-    { id: "1", name: "Product Design Team", icon: "P" },
-    { id: "2", name: "Developers", icon: "D" },
-    { id: "3", name: "Graphics", icon: "G" },
-  ];
+  const openCreateChannel = () => setIsCreateChannelOpen(true);
+  const closeCreateChannel = () => setIsCreateChannelOpen(false);
 
-  const isLoading = loadingDMs || loadingUsers;
+  // This is a temporary solution until we implement spaces
+  const tempSpaceId = "temp-space-id";
+
+  const getChannelIcon = (type: ChannelType) => {
+    switch (type) {
+      case ChannelType.TEXT:
+        return <Hash className="h-4 w-4" />;
+      case ChannelType.VOICE:
+        return <Volume2 className="h-4 w-4" />;
+      case ChannelType.ANNOUNCEMENT:
+        return <Megaphone className="h-4 w-4" />;
+      default:
+        return <Hash className="h-4 w-4" />;
+    }
+  };
+
+  const isLoading = loadingDMs || loadingUsers || loadingChannels;
 
   return (
     <div className="w-64 border-r border-border flex flex-col h-full bg-card">
@@ -51,7 +77,7 @@ export default function ChatSidebar() {
           onClick={() => router.push("/chat/new")}
         >
           <PlusCircle size={18} />
-          Create New Chat
+          New Conversation
         </Button>
       </div>
 
@@ -98,6 +124,78 @@ export default function ChatSidebar() {
                 <Star size={18} />
                 <span className="text-sm">Starred</span>
               </Link>
+            </div>
+          )}
+        </div>
+
+        {/* Channels */}
+        <div className="mb-2">
+          <div className="flex items-center justify-between p-2">
+            <button
+              className="flex items-center gap-2 hover:bg-accent rounded-md"
+              onClick={toggleChannels}
+            >
+              {channelsOpen ? (
+                <ChevronDown size={16} />
+              ) : (
+                <ChevronRight size={16} />
+              )}
+              <span className="text-sm font-medium">Channels</span>
+            </button>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={openCreateChannel}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Create Channel</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+
+          {channelsOpen && (
+            <div className="ml-2 space-y-1">
+              {loadingChannels ? (
+                // Loading state
+                Array(3)
+                  .fill(0)
+                  .map((_, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2">
+                      <Skeleton className="h-4 w-4" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                  ))
+              ) : channels && channels.length > 0 ? (
+                // Render channels
+                channels.map((channel) => (
+                  <Link
+                    key={channel._id}
+                    href={`/chat/channel/${channel._id}`}
+                    className={`flex items-center gap-2 p-2 rounded-md hover:bg-accent ${
+                      pathname === `/chat/channel/${channel._id}`
+                        ? "bg-accent"
+                        : ""
+                    }`}
+                  >
+                    {getChannelIcon(channel.type as ChannelType)}
+                    <span className="text-sm">{channel.name}</span>
+                  </Link>
+                ))
+              ) : (
+                // No channels
+                <div className="p-2 text-sm text-muted-foreground">
+                  No channels yet
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -151,10 +249,6 @@ export default function ChatSidebar() {
                       <span className="text-sm">
                         {otherUser?.displayName || "Unknown User"}
                       </span>
-                      {/* Add unread indicator if needed */}
-                      {/* {hasUnread && (
-                        <div className="ml-auto w-2 h-2 rounded-full bg-primary"></div>
-                      )} */}
                     </Link>
                   );
                 })
@@ -167,40 +261,14 @@ export default function ChatSidebar() {
             </div>
           )}
         </div>
-
-        <div className="mb-2">
-          <button
-            className="flex items-center gap-2 p-2 w-full hover:bg-accent rounded-md"
-            onClick={toggleGroups}
-          >
-            {groupsOpen ? (
-              <ChevronDown size={16} />
-            ) : (
-              <ChevronRight size={16} />
-            )}
-            <span className="text-sm font-medium">Groups</span>
-          </button>
-
-          {groupsOpen && (
-            <div className="ml-2">
-              {groups.map((group) => (
-                <Link
-                  key={group.id}
-                  href={`/chat/group/${group.id}`}
-                  className={`flex items-center gap-2 p-2 rounded-md hover:bg-accent ${
-                    pathname === `/chat/group/${group.id}` ? "bg-accent" : ""
-                  }`}
-                >
-                  <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-secondary-foreground text-xs">
-                    {group.icon}
-                  </div>
-                  <span className="text-sm">{group.name}</span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
+
+      {/* Create Channel Dialog */}
+      <CreateChannelDialog
+        isOpen={isCreateChannelOpen}
+        onClose={closeCreateChannel}
+        spaceId={tempSpaceId}
+      />
     </div>
   );
 }
