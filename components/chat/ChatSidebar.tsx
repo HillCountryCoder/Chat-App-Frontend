@@ -17,55 +17,54 @@ import {
   Hash,
   Volume2,
   Megaphone,
-  Plus,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { DirectMessage } from "@/types/chat";
-import { ChannelType } from "@/types/chat";
-import CreateChannelDialog from "./CreateChannelDialog";
+import { DirectMessage, ChannelType } from "@/types/chat";
 
 export default function ChatSidebar() {
   const [shortcutsOpen, setShortcutsOpen] = useState(true);
   const [directMessagesOpen, setDirectMessagesOpen] = useState(true);
   const [channelsOpen, setChannelsOpen] = useState(true);
-  const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
   const { data: directMessages, isLoading: loadingDMs } = useDirectMessages();
+  // Use our hook for DM users
   const { getOtherParticipant, isLoading: loadingUsers } =
     useDirectMessageUsers(directMessages);
-  const { data: channels, isLoading: loadingChannels } = useChannels();
+
+  const { data: channels = [], isLoading: loadingChannels } = useChannels();
 
   const toggleShortcuts = () => setShortcutsOpen(!shortcutsOpen);
   const toggleDirectMessages = () => setDirectMessagesOpen(!directMessagesOpen);
   const toggleChannels = () => setChannelsOpen(!channelsOpen);
 
-  const openCreateChannel = () => setIsCreateChannelOpen(true);
-  const closeCreateChannel = () => setIsCreateChannelOpen(false);
+  const isLoading = loadingDMs || loadingUsers || loadingChannels;
 
-  const getChannelIcon = (type: ChannelType) => {
+  // Get channel icon based on type
+  const getChannelIcon = (type: string) => {
     switch (type) {
-      case ChannelType.TEXT:
-        return <Hash className="h-4 w-4" />;
       case ChannelType.VOICE:
-        return <Volume2 className="h-4 w-4" />;
+        return <Volume2 size={16} />;
       case ChannelType.ANNOUNCEMENT:
-        return <Megaphone className="h-4 w-4" />;
+        return <Megaphone size={16} />;
+      case ChannelType.TEXT:
       default:
-        return <Hash className="h-4 w-4" />;
+        return <Hash size={16} />;
     }
   };
 
-  const isLoading = loadingDMs || loadingUsers || loadingChannels;
+  const handleNewConversation = () => {
+    router.push("/chat/new");
+  };
 
   return (
     <div className="w-64 border-r border-border flex flex-col h-full bg-card">
       <div className="p-4">
         <Button
           className="w-full justify-start gap-2"
-          onClick={() => router.push("/chat/new")}
+          onClick={handleNewConversation}
         >
           <PlusCircle size={18} />
           New Conversation
@@ -119,60 +118,52 @@ export default function ChatSidebar() {
           )}
         </div>
 
-        {/* Channels */}
+        {/* Channels section */}
         <div className="mb-2">
-          <div className="flex items-center justify-between p-2">
-            <button
-              className="flex items-center gap-2 hover:bg-accent rounded-md"
-              onClick={toggleChannels}
-            >
-              {channelsOpen ? (
-                <ChevronDown size={16} />
-              ) : (
-                <ChevronRight size={16} />
-              )}
-              <span className="text-sm font-medium">Channels</span>
-            </button>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={openCreateChannel}
-              title="Create Channel"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
+          <button
+            className="flex items-center gap-2 p-2 w-full hover:bg-accent rounded-md"
+            onClick={toggleChannels}
+          >
+            {channelsOpen ? (
+              <ChevronDown size={16} />
+            ) : (
+              <ChevronRight size={16} />
+            )}
+            <span className="text-sm font-medium">Channels</span>
+          </button>
 
           {channelsOpen && (
-            <div className="ml-2 space-y-1">
+            <div className="ml-2">
               {loadingChannels ? (
                 // Loading state
                 Array(3)
                   .fill(0)
                   .map((_, i) => (
                     <div key={i} className="flex items-center gap-2 p-2">
-                      <Skeleton className="h-4 w-4" />
+                      <Skeleton className="h-6 w-6 rounded-md" />
                       <Skeleton className="h-4 w-24" />
                     </div>
                   ))
               ) : channels && channels.length > 0 ? (
                 // Render channels
-                channels.map((channel) => (
-                  <Link
-                    key={channel._id}
-                    href={`/chat/channel/${channel._id}`}
-                    className={`flex items-center gap-2 p-2 rounded-md hover:bg-accent ${
-                      pathname === `/chat/channel/${channel._id}`
-                        ? "bg-accent"
-                        : ""
-                    }`}
-                  >
-                    {getChannelIcon(channel.type as ChannelType)}
-                    <span className="text-sm">{channel.name}</span>
-                  </Link>
-                ))
+                channels.map((channel) => {
+                  const channelIcon = getChannelIcon(channel.type);
+
+                  return (
+                    <Link
+                      key={channel._id}
+                      href={`/chat/channel/${channel._id}`}
+                      className={`flex items-center gap-2 p-2 rounded-md hover:bg-accent ${
+                        pathname === `/chat/channel/${channel._id}`
+                          ? "bg-accent"
+                          : ""
+                      }`}
+                    >
+                      <div className="text-muted-foreground">{channelIcon}</div>
+                      <span className="text-sm truncate">{channel.name}</span>
+                    </Link>
+                  );
+                })
               ) : (
                 // No channels
                 <div className="p-2 text-sm text-muted-foreground">
@@ -183,6 +174,7 @@ export default function ChatSidebar() {
           )}
         </div>
 
+        {/* Direct Messages section */}
         <div className="mb-2">
           <button
             className="flex items-center gap-2 p-2 w-full hover:bg-accent rounded-md"
@@ -229,7 +221,7 @@ export default function ChatSidebar() {
                           {otherUser?.displayName?.charAt(0) || "?"}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="text-sm">
+                      <span className="text-sm truncate">
                         {otherUser?.displayName || "Unknown User"}
                       </span>
                     </Link>
@@ -245,12 +237,6 @@ export default function ChatSidebar() {
           )}
         </div>
       </div>
-
-      {/* Create Channel Dialog */}
-      <CreateChannelDialog
-        isOpen={isCreateChannelOpen}
-        onClose={closeCreateChannel}
-      />
     </div>
   );
 }
