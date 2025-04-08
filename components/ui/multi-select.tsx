@@ -4,6 +4,7 @@ import * as React from "react";
 import { X, Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -45,23 +46,10 @@ export function MultiSelect({
   className,
 }: MultiSelectProps) {
   const [open, setOpen] = React.useState(false);
-  const [inputValue, setInputValue] = React.useState("");
+  const [searchQuery, setSearchQuery] = React.useState("");
 
   const handleUnselect = (value: string) => {
     onChange(selected.filter((item) => item !== value));
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    const input = e.target as HTMLInputElement;
-    if (input.value === "" && e.key === "Backspace") {
-      onChange(selected.slice(0, -1));
-    }
-
-    // Handle search
-    if (input.value !== "" && onSearch) {
-      setInputValue(input.value);
-      onSearch(input.value);
-    }
   };
 
   // Memoized selected items for better rendering performance
@@ -72,52 +60,52 @@ export function MultiSelect({
     });
   }, [selected, options]);
 
+  // Handle backspace to remove the last selected item when the input is empty
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Backspace" && !searchQuery && selected.length > 0) {
+      e.preventDefault();
+      onChange(selected.slice(0, -1));
+    }
+  };
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <div
+        <Button
+          variant="outline"
           role="combobox"
           aria-expanded={open}
           className={cn(
-            "flex min-h-10 w-full flex-wrap items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus:ring-offset-2",
+            "w-full justify-between font-normal bg-background h-auto min-h-10 px-3 py-2",
+            !selected.length && "text-muted-foreground",
             className,
           )}
         >
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1 items-center">
             {selectedItems.length > 0 ? (
               selectedItems.map((item) => (
-                <Badge key={item.value} variant="secondary" className="mb-1">
+                <Badge
+                  key={item.value}
+                  variant="secondary"
+                  className="mb-1 mr-1"
+                >
                   {item.label}
                   <button
+                    type="button"
                     className="ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleUnselect(item.value);
-                    }}
-                    onMouseDown={(e) => {
+                    onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
+                      handleUnselect(item.value);
                     }}
-                    onClick={() => handleUnselect(item.value)}
                   >
                     <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
                   </button>
                 </Badge>
               ))
             ) : (
-              <span className="text-sm text-muted-foreground">
-                {placeholder}
-              </span>
+              <span>{placeholder}</span>
             )}
-            <CommandInput
-              placeholder=""
-              className="ml-1 flex-1 shadow-none outline-none placeholder:text-foreground"
-              value={inputValue}
-              onKeyDown={handleKeyDown}
-              onValueChange={(value) => {
-                setInputValue(value);
-                if (onSearch) onSearch(value);
-              }}
-            />
           </div>
           <div className="flex items-center">
             {isLoading ? (
@@ -126,10 +114,19 @@ export function MultiSelect({
               <ChevronsUpDown className="h-4 w-4 opacity-50" />
             )}
           </div>
-        </div>
+        </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0">
-        <Command>
+      <PopoverContent className="w-full p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="Search..."
+            value={searchQuery}
+            onKeyDown={handleKeyDown}
+            onValueChange={(value) => {
+              setSearchQuery(value);
+              if (onSearch) onSearch(value);
+            }}
+          />
           <CommandList>
             <CommandEmpty>No results found</CommandEmpty>
             <CommandGroup>
@@ -138,7 +135,7 @@ export function MultiSelect({
                 return (
                   <CommandItem
                     key={option.value}
-                    value={option.label}
+                    value={option.value}
                     onSelect={() => {
                       if (isSelected) {
                         onChange(
@@ -147,7 +144,6 @@ export function MultiSelect({
                       } else {
                         onChange([...selected, option.value]);
                       }
-                      setInputValue(""); // Clear input after selection
                     }}
                   >
                     <div className="flex items-center gap-2 w-full">
