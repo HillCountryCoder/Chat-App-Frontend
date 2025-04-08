@@ -7,20 +7,13 @@ const authRoutes = [
   "/forgot-password",
   "/reset-password",
 ];
-const protectedRoutes = ["/"];
+const protectedRoutes = ["/chat"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Debugging: Log all cookies
-  console.log(
-    "All cookie keys:",
-    request.cookies.getAll().map((c) => c.name),
-  );
-
   // Try to get token from cookie
   const token = request.cookies.get("token")?.value;
-  console.log("Token from cookie:", token ? "Present" : "Not found");
 
   // Alternative check: Get token from authorization header
   const authHeader = request.headers.get("authorization");
@@ -29,17 +22,26 @@ export function middleware(request: NextRequest) {
     : null;
 
   const isAuthenticated = !!(token || headerToken);
-  console.log("Authentication status:", isAuthenticated);
+
+  // Handle root path specifically - redirect to chat if authenticated, login if not
+  if (pathname === "/") {
+    if (isAuthenticated) {
+      return NextResponse.redirect(new URL("/chat", request.url));
+    } else {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+  }
 
   // If not authenticated and trying to access protected route
-  if (!isAuthenticated && protectedRoutes.some((route) => pathname === route)) {
-    console.log("Redirecting unauthenticated user from:", pathname);
+  if (
+    !isAuthenticated &&
+    protectedRoutes.some((route) => pathname.startsWith(route))
+  ) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
   // If authenticated and trying to access auth routes
   if (isAuthenticated && authRoutes.some((route) => pathname === route)) {
-    console.log("Redirecting authenticated user from:", pathname);
     return NextResponse.redirect(new URL("/chat", request.url));
   }
 
@@ -49,6 +51,7 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/",
+    "/chat",
     "/login",
     "/register",
     "/forgot-password",

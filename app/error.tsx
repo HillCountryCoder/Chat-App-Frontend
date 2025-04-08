@@ -51,7 +51,7 @@ export default function ErrorPage({
           </Button>
 
           <Button variant="outline" asChild className="gap-2">
-            <Link href="/">
+            <Link href="/chat">
               <Home className="h-4 w-4" />
               <span>Go home</span>
             </Link>

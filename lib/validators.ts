@@ -21,24 +21,11 @@ export const registerSchema = z.object({
   lastName: z.string().optional(),
 });
 
-export const loginSchema = z
-  .object({
-    // Allow either email or username, but at least one must be provided
-    email: z.string().optional(),
-    username: z.string().optional(),
-    password: z.string().min(1, "Password is required"),
-  })
-  .refine(
-    (data) => {
-      // Either email or username must be provided
-      const emailOrUsername = data.email || data.username;
-      return emailOrUsername && emailOrUsername.length > 0;
-    },
-    {
-      message: "Email or username is required",
-      path: ["email"], // Show error on the email field
-    },
-  );
+export const loginSchema = z.object({
+  // Allow either email or username, but at least one must be provided
+  identifier: z.string().min(6, "Email or Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
 export const messageSchema = z.object({
   content: z
     .string()
