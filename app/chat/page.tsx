@@ -3,10 +3,9 @@
 
 import { useAuthStore } from "@/store/auth-store";
 import DirectMessageList from "@/components/chat/DirectMessageList";
-import { EmptyState } from "@/components/chat/EmptyState";
-import { MessageSquare, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
 
 export default function ChatHomePage() {
   const { user, isAuthenticated } = useAuthStore();
@@ -27,7 +26,7 @@ export default function ChatHomePage() {
             onClick={() => router.push("/chat/new")}
           >
             <Plus className="h-4 w-4" />
-            New Chat
+		New Chat
           </Button>
         </div>
       </div>

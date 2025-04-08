@@ -72,11 +72,15 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
       {!isOwnMessage && (
         <Avatar className="h-8 w-8 mr-2">
           <AvatarImage
-            src={messageUser?.avatarUrl || ""}
+            src={
+              messageUser?.displayName
+                ? messageUser?.displayName
+                : messageUser?.avatarUrl
+            }
             alt={messageUser?.displayName || ""}
           />
           <AvatarFallback className="bg-primary/20">
-            {messageUser?.displayName?.charAt(0) || "?"}
+            {messageUser?.displayName?.charAt(0,2) || "?"}
           </AvatarFallback>
         </Avatar>
       )}
