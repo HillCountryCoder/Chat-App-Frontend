@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useSocket } from "@/providers/socket-provider";
@@ -35,6 +36,7 @@ export function useChannelMessages(channelId?: string) {
     enabled: !!channelId,
   });
 }
+
 export function useChannelMembers(channelId?: string) {
   return useQuery({
     queryKey: ["channel-members", channelId],
@@ -65,6 +67,7 @@ export function useChannelMembers(channelId?: string) {
     enabled: !!channelId,
   });
 }
+
 export function useSendChannelMessage() {
   const { socket } = useSocket();
   const queryClient = useQueryClient();
@@ -74,17 +77,13 @@ export function useSendChannelMessage() {
       // If socket is connected, emit message through socket
       if (socket?.connected) {
         return new Promise((resolve, reject) => {
-          socket.emit(
-            "send_channel_message",
-            message,
-            (response: { success: boolean; error?: string }) => {
-              if (response.success) {
-                resolve(response);
-              } else {
-                reject(new Error(response.error || "Failed to send message"));
-              }
-            },
-          );
+          socket.emit("send_channel_message", message, (response: any) => {
+            if (response.success) {
+              resolve(response);
+            } else {
+              reject(new Error(response.error || "Failed to send message"));
+            }
+          });
         });
       }
       // Fallback to REST API if socket not connected
