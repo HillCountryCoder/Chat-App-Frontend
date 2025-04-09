@@ -6,7 +6,7 @@ import { useDirectMessages } from "@/hooks/use-chat";
 import { useDirectMessageUsers } from "@/hooks/use-direct-message-users";
 import { useChannels } from "@/hooks/use-channels";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { DirectMessage, Message } from "@/types/chat";
+import { Channel, DirectMessage, Message } from "@/types/chat";
 import { formatDistanceToNow } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MessageSquare, Hash } from "lucide-react";
@@ -53,7 +53,7 @@ export default function ConversationList() {
   };
 
   // Format last message preview
-  const getLastMessagePreview = (dm: DirectMessage): string => {
+  const getLastMessagePreview = (dm: DirectMessage | Channel): string => {
     if (!dm.lastMessage) return "No messages yet";
 
     const message = dm.lastMessage;
@@ -91,7 +91,7 @@ export default function ConversationList() {
           : new Date(0),
         avatar: null,
         preview: channel.lastMessage
-          ? channel.lastMessage?.content
+          ? getLastMessagePreview(channel)
           : channel.description || `A ${channel.type} channel`,
         unreadCount: getChannelUnreadCount(channel._id),
         channelType: channel.type,
