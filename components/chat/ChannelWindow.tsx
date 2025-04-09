@@ -26,6 +26,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "../ui/skeleton";
 import ChannelMembersDrawer from "./ChannelMembersDrawer";
+import { useMarkAsRead } from "@/hooks/use-unread";
 
 interface ChannelWindowProps {
   channelId: string;
@@ -37,6 +38,9 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { socket, isConnected } = useSocket();
   const queryClient = useQueryClient();
+  const { markChannelAsRead } = useMarkAsRead();
+  // Track marked read status with a ref instead of state to avoid re-renders
+  const hasMarkedAsReadRef = useRef(false);
 
   const {
     data: channel,
@@ -55,34 +59,54 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
 
   const sendMessageMutation = useSendChannelMessage();
 
+  // Reset the ref when channelId changes
+  useEffect(() => {
+    // Mark as read only once per channel visit
+    if (channelId && !hasMarkedAsReadRef.current) {
+      markChannelAsRead.mutate(channelId);
+      hasMarkedAsReadRef.current = true;
+    }
+
+    // Reset when unmounting or changing channels
+    return () => {
+      hasMarkedAsReadRef.current = false;
+    };
+  }, [channelId, markChannelAsRead]);
+
   // Listen for new messages via socket
   useEffect(() => {
-    if (socket) {
-      const handleNewMessage = (data: { message: Message }) => {
-        if (data.message.channelId === channelId) {
-          queryClient.invalidateQueries({
-            queryKey: ["messages", "channel", channelId],
-          });
+    if (!socket) return;
+
+    const handleNewMessage = (data: { message: Message }) => {
+      if (data.message.channelId === channelId) {
+        // Invalidate the query to get new messages
+        queryClient.invalidateQueries({
+          queryKey: ["messages", "channel", channelId],
+        });
+
+        // Mark the new message as read since we're in the channel
+        if (hasMarkedAsReadRef.current) {
+          markChannelAsRead.mutate(channelId);
         }
-      };
+      }
+    };
 
-      socket.on("new_channel_message", handleNewMessage);
+    socket.on("new_channel_message", handleNewMessage);
 
-      // Join the channel room
-      socket.emit("join_channel", { channelId }, (response: any) => {
-        if (!response.success) {
-          console.error("Failed to join channel room:", response.error);
-        }
-      });
+    // Join the channel room only once when component mounts
+    socket.emit("join_channel", { channelId }, (response: any) => {
+      if (!response.success) {
+        console.error("Failed to join channel room:", response.error);
+      }
+    });
 
-      return () => {
-        socket.off("new_channel_message", handleNewMessage);
+    return () => {
+      socket.off("new_channel_message", handleNewMessage);
 
-        // Leave the channel room when component unmounts
-        socket.emit("leave_channel", { channelId });
-      };
-    }
-  }, [socket, channelId, queryClient]);
+      // Leave the channel room when component unmounts
+      socket.emit("leave_channel", { channelId });
+    };
+  }, [socket, channelId, queryClient, markChannelAsRead]);
 
   // Scroll to bottom when messages change
   useEffect(() => {

@@ -15,6 +15,7 @@ import { formatDistanceToNow } from "date-fns";
 import { Phone, Video, PaperclipIcon, Send, Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "../ui/skeleton";
+import { useMarkAsRead } from "@/hooks/use-unread";
 
 interface ChatWindowProps {
   directMessageId: string;
@@ -30,6 +31,7 @@ export default function ChatWindow({
   const { socket, isConnected } = useSocket();
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
+  const { markDirectMessageAsRead } = useMarkAsRead();
 
   const {
     data: messages = [],
@@ -42,14 +44,31 @@ export default function ChatWindow({
 
   const sendMessageMutation = useSendMessage();
 
+  // Mark messages as read when entering the chat
+  useEffect(() => {
+    let isMounted = true;
+
+    if (directMessageId) {
+      markDirectMessageAsRead.mutate(directMessageId);
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [directMessageId]);
+
   // Listen for new messages via socket
   useEffect(() => {
     if (socket) {
       const handleNewMessage = (data: { message: Message }) => {
         if (data.message.directMessageId === directMessageId) {
+          // Invalidate the query to get new messages
           queryClient.invalidateQueries({
             queryKey: ["messages", "direct", directMessageId],
           });
+
+          // Mark the new message as read since we're in the conversation
+          markDirectMessageAsRead.mutate(directMessageId);
         }
       };
 
@@ -59,7 +78,7 @@ export default function ChatWindow({
         socket.off("new_direct_message", handleNewMessage);
       };
     }
-  }, [socket, directMessageId, queryClient]);
+  }, [socket, directMessageId, queryClient, markDirectMessageAsRead]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
