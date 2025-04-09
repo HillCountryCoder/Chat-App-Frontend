@@ -27,7 +27,7 @@ export default function UnreadBadge({
         ${className || ""}
       `}
     >
-      {count > 1 ? displayCount : null}
+      {count > 0 ? displayCount : null}
     </div>
   );
 }

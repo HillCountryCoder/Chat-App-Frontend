@@ -186,8 +186,8 @@ export default function ConversationList() {
                 </div>
               )}
 
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-center">
+              <div className="flex justify-between min-w-0 w-[100%]">
+                <div className="flex flex-col justify-between items-start">
                   <h3 className="font-medium truncate flex items-center gap-2">
                     {conversation.name}
                     {conversation.channelType === ChannelType.ANNOUNCEMENT && (
@@ -196,20 +196,21 @@ export default function ConversationList() {
                       </span>
                     )}
                   </h3>
-                  <div className="flex items-center gap-2">
-                    {!isActive && conversation.unreadCount > 0 && (
-                      <UnreadBadge count={conversation.unreadCount} />
-                    )}
-                    <span className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(conversation.lastActivity, {
-                        addSuffix: true,
-                      })}
-                    </span>
-                  </div>
+                  <p className="text-sm text-muted-foreground truncate">
+                    {conversation.preview}
+                  </p>
                 </div>
-                <p className="text-sm text-muted-foreground truncate">
-                  {conversation.preview}
-                </p>
+
+                <div className="flex flex-col-reverse items-end  gap-2">
+                  {!isActive && conversation.unreadCount > 0 && (
+                    <UnreadBadge count={conversation.unreadCount} />
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    {formatDistanceToNow(conversation.lastActivity, {
+                      addSuffix: true,
+                    })}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
