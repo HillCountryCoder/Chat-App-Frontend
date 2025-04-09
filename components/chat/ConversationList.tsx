@@ -13,6 +13,8 @@ import { MessageSquare, Hash } from "lucide-react";
 import { EmptyState } from "./EmptyState";
 import { useAuthStore } from "@/store/auth-store";
 import { ChannelType } from "@/types/chat";
+import { useUnreadCounts } from "@/hooks/use-unread";
+import UnreadBadge from "./UnreadBadge";
 
 export default function ConversationList() {
   const {
@@ -29,6 +31,9 @@ export default function ConversationList() {
     isLoading: loadingChannels,
     error: channelsError,
   } = useChannels();
+
+  const { getDirectMessageUnreadCount, getChannelUnreadCount } =
+    useUnreadCounts();
 
   const router = useRouter();
   const pathname = usePathname();
@@ -71,7 +76,7 @@ export default function ConversationList() {
         lastActivity: new Date(dm.lastActivity),
         avatar: getOtherParticipant(dm)?.avatarUrl,
         preview: getLastMessagePreview(dm),
-        badge: null, // For notification badges
+        unreadCount: getDirectMessageUnreadCount(dm._id),
         channelType: null,
         originalData: dm,
       })),
@@ -86,7 +91,7 @@ export default function ConversationList() {
           : new Date(0),
         avatar: null,
         preview: channel.description || `A ${channel.type} channel`,
-        badge: null,
+        unreadCount: getChannelUnreadCount(channel._id),
         channelType: channel.type,
         originalData: channel,
       })),
@@ -96,7 +101,13 @@ export default function ConversationList() {
     return allConversations.sort(
       (a, b) => b.lastActivity.getTime() - a.lastActivity.getTime(),
     );
-  }, [directMessages, channels, getOtherParticipant]);
+  }, [
+    directMessages,
+    channels,
+    getOtherParticipant,
+    getDirectMessageUnreadCount,
+    getChannelUnreadCount,
+  ]);
 
   const isLoading = loadingDMs || loadingUsers || loadingChannels;
 
@@ -185,11 +196,16 @@ export default function ConversationList() {
                       </span>
                     )}
                   </h3>
-                  <span className="text-xs text-muted-foreground">
-                    {formatDistanceToNow(conversation.lastActivity, {
-                      addSuffix: true,
-                    })}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {!isActive && conversation.unreadCount > 0 && (
+                      <UnreadBadge count={conversation.unreadCount} />
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {formatDistanceToNow(conversation.lastActivity, {
+                        addSuffix: true,
+                      })}
+                    </span>
+                  </div>
                 </div>
                 <p className="text-sm text-muted-foreground truncate">
                   {conversation.preview}

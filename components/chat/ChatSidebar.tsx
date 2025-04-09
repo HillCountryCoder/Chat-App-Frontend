@@ -21,6 +21,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DirectMessage, ChannelType } from "@/types/chat";
+import { useUnreadCounts } from "@/hooks/use-unread";
+import UnreadBadge from "./UnreadBadge";
 
 export default function ChatSidebar() {
   const [shortcutsOpen, setShortcutsOpen] = useState(true);
@@ -35,11 +37,20 @@ export default function ChatSidebar() {
     useDirectMessageUsers(directMessages);
 
   const { data: channels = [], isLoading: loadingChannels } = useChannels();
-
+  const { getDirectMessageUnreadCount, getChannelUnreadCount } =
+    useUnreadCounts();
   const toggleShortcuts = () => setShortcutsOpen(!shortcutsOpen);
   const toggleDirectMessages = () => setDirectMessagesOpen(!directMessagesOpen);
   const toggleChannels = () => setChannelsOpen(!channelsOpen);
+  const dmUnreadTotal =
+    directMessages?.reduce((total, dm) => {
+      return total + getDirectMessageUnreadCount(dm._id);
+    }, 0) || 0;
 
+  // Calculate total group unread count (simulated for static data)
+  const groupUnreadTotal = channels.reduce((total, group) => {
+    return total + getChannelUnreadCount(group._id);
+  }, 0);
   const isLoading = loadingDMs || loadingUsers || loadingChannels;
 
   // Get channel icon based on type
@@ -130,6 +141,7 @@ export default function ChatSidebar() {
               <ChevronRight size={16} />
             )}
             <span className="text-sm font-medium">Channels</span>
+            {groupUnreadTotal > 0 && <UnreadBadge count={groupUnreadTotal} />}
           </button>
 
           {channelsOpen && (
@@ -148,7 +160,7 @@ export default function ChatSidebar() {
                 // Render channels
                 channels.map((channel) => {
                   const channelIcon = getChannelIcon(channel.type);
-
+                  const unreadCount = getChannelUnreadCount(channel._id);
                   return (
                     <Link
                       key={channel._id}
@@ -161,6 +173,10 @@ export default function ChatSidebar() {
                     >
                       <div className="text-muted-foreground">{channelIcon}</div>
                       <span className="text-sm truncate">{channel.name}</span>
+                      {unreadCount > 0 &&
+                        !pathname.includes(`/chat/group/${channel._id}`) && (
+                          <UnreadBadge count={unreadCount} />
+                        )}
                     </Link>
                   );
                 })
@@ -186,6 +202,7 @@ export default function ChatSidebar() {
               <ChevronRight size={16} />
             )}
             <span className="text-sm font-medium">Direct Messages</span>
+            {dmUnreadTotal > 0 && <UnreadBadge count={dmUnreadTotal} />}
           </button>
 
           {directMessagesOpen && (
@@ -204,6 +221,7 @@ export default function ChatSidebar() {
                 // Render direct messages
                 directMessages.map((dm: DirectMessage) => {
                   const otherUser = getOtherParticipant(dm);
+                  const unreadCount = getDirectMessageUnreadCount(dm._id);
                   return (
                     <Link
                       key={dm._id}
@@ -224,6 +242,10 @@ export default function ChatSidebar() {
                       <span className="text-sm truncate">
                         {otherUser?.displayName || "Unknown User"}
                       </span>
+                      {unreadCount > 0 &&
+                        !pathname.includes(`/chat/dm/${dm._id}`) && (
+                          <UnreadBadge count={unreadCount} />
+                        )}
                     </Link>
                   );
                 })
