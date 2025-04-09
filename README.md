@@ -5,6 +5,8 @@ This provides comprehensive details about the documentation for the application 
 ## Table of Content 
 [Error Handling](#error-handling-system)
 
+[Unread Messages Implementation](#unread-messages-implementation)
+
 ## Error Handling System
 
 This document explains the comprehensive error handling system implemented in our frontend application.
@@ -164,3 +166,81 @@ To add new error types:
 2. Create a new error class extending `BaseError`
 3. Add the error handling logic to `factory.ts`
 4. Update UI components if needed
+
+## Unread Messages Implementation
+
+### Overview
+
+This implementation adds unread message tracking and display to the chat application. When a user receives a new message, a counter is displayed showing the number of unread messages. The unread count is cleared when the user opens the conversation.
+
+### Backend Components
+
+#### 1. Redis Integration
+- Added a Redis client to store ephemeral data like unread message counts
+- Implemented connection and error handling for Redis
+
+#### 2. Unread Messages Service
+- Created a service to track unread message counts in Redis
+- Implemented methods for:
+  - Incrementing unread counts when new messages arrive
+  - Getting unread counts for a specific conversation
+  - Getting all unread counts for a user
+  - Marking messages as read
+  - Getting total unread count
+
+#### 3. Direct Message and Channel Service Updates
+- Updated to increment unread counts when messages are sent
+- Added methods to mark messages as read
+- Modified to exclude the sender from unread notifications
+
+#### 4. API Endpoints
+- Added endpoints to mark messages as read
+- Added endpoint to get all unread counts for the authenticated user
+
+#### 5. Socket Handlers
+- Updated to emit real-time unread count updates
+- Added handlers for marking messages as read through sockets
+- Added unread count initialization on socket connection
+
+### Frontend Components
+
+#### 1. UI Components
+- Created `UnreadBadge` component to display unread counts
+- Updated conversation lists to show unread counts
+- Updated the user avatar to show total unread count
+- Added document title updates for unread messages
+
+#### 2. React Hooks
+- Created `useUnreadCounts` hook to access and manage unread counts
+- Created `useMarkAsRead` hook to mark messages as read
+- Updated existing hooks to work with unread functionality
+
+#### 3. Real-time Updates
+- Set up socket event listeners for unread count updates
+- Implemented automatic marking of messages as read when a conversation is opened
+- Ensured unread counts are properly invalidated and refreshed
+
+#### 4. Data Flow
+- Unread counts are fetched on initial load
+- Counts are updated in real-time via socket events
+- Counts are stored locally for immediate UI feedback
+- Counts are synchronized with the server via API/sockets
+
+### Key Features
+
+1. **New Message Indicators**: Blue dots with count show unread messages
+2. **Section Aggregation**: Total unread counts shown for DM and Channel sections
+3. **Global Notification**: Total unread count shown on user avatar
+4. **Browser Tab Updates**: Document title shows unread count
+5. **Automatic Read Marking**: Messages are marked as read when conversation is viewed
+6. **Real-time Updates**: Counts update instantly when new messages arrive
+
+### Technical Details
+
+- Using Redis for storing ephemeral unread counts
+- TTL of 30 days for unread message keys
+- Socket.io for real-time notifications
+- React Query for data fetching and cache management
+- Local state syncing for immediate UI feedback
+
+This implementation provides a complete solution for tracking and displaying unread messages, enhancing the user experience by clearly indicating when new messages have arrived.
