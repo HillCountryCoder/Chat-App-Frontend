@@ -10,6 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MessageSquare } from "lucide-react";
 import { EmptyState } from "./EmptyState";
 import { useAuthStore } from "@/store/auth-store";
+import { useUnreadCounts } from "@/hooks/use-unread";
+import UnreadBadge from "./UnreadBadge";
 
 export default function DirectMessageList() {
   const {
@@ -20,6 +22,8 @@ export default function DirectMessageList() {
 
   const { getOtherParticipant, isLoading: loadingUsers } =
     useDirectMessageUsers(directMessages);
+
+  const { getDirectMessageUnreadCount } = useUnreadCounts();
 
   const router = useRouter();
   const pathname = usePathname();
@@ -92,6 +96,7 @@ export default function DirectMessageList() {
       {directMessages.map((dm) => {
         const isActive = pathname === `/chat/dm/${dm._id}`;
         const otherUser = getOtherParticipant(dm);
+        const unreadCount = getDirectMessageUnreadCount(dm._id);
 
         return (
           <div
@@ -116,11 +121,16 @@ export default function DirectMessageList() {
                   <h3 className="font-medium truncate">
                     {otherUser?.displayName || "Unknown User"}
                   </h3>
-                  <span className="text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(dm.lastActivity), {
-                      addSuffix: true,
-                    })}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {!isActive && unreadCount > 0 && (
+                      <UnreadBadge count={unreadCount} />
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {formatDistanceToNow(new Date(dm.lastActivity), {
+                        addSuffix: true,
+                      })}
+                    </span>
+                  </div>
                 </div>
                 <p className="text-sm text-muted-foreground truncate">
                   {getLastMessagePreview(dm)}
