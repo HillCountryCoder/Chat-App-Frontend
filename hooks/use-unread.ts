@@ -2,7 +2,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useSocket } from "@/providers/socket-provider";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { debounce } from "lodash";
 
 // Types for unread counts
 export interface UnreadCounts {
@@ -22,9 +23,17 @@ export function useUnreadCounts() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["unread-counts"],
     queryFn: async () => {
-      const { data } = await api.get("/direct-messages/unread");
-      return data as UnreadCounts;
+      try {
+        const { data } = await api.get("/direct-messages/unread-counts");
+        return data as UnreadCounts;
+      } catch (error) {
+        console.error("Error fetching unread counts:", error);
+        // Return empty counts on error rather than failing the query
+        return { directMessages: {}, channels: {} } as UnreadCounts;
+      }
     },
+    // Still return empty counts on error
+    staleTime: 30000, // 30 seconds
   });
 
   // Set up socket listener for real-time updates
@@ -114,30 +123,60 @@ export function useMarkAsRead() {
   const queryClient = useQueryClient();
   const { socket } = useSocket();
 
+  // Create debounced functions to prevent excessive API calls
+  const debouncedDirectMessageMarkRead = useCallback(
+    debounce(
+      async (directMessageId: string, socketInstance: any, callback: any) => {
+        try {
+          if (socketInstance?.connected) {
+            socketInstance.emit("mark_dm_read", { directMessageId }, callback);
+          } else {
+            const { data } = await api.post(
+              `/direct-messages/${directMessageId}/read`,
+            );
+            callback(data);
+          }
+        } catch (error) {
+          console.error("Error marking messages as read:", error);
+          callback({ success: false });
+        }
+      },
+      500,
+    ), // 500ms debounce
+    [],
+  );
+
+  const debouncedChannelMarkRead = useCallback(
+    debounce(async (channelId: string, socketInstance: any, callback: any) => {
+      try {
+        if (socketInstance?.connected) {
+          socketInstance.emit("mark_channel_read", { channelId }, callback);
+        } else {
+          const { data } = await api.post(`/channels/${channelId}/read`);
+          callback(data);
+        }
+      } catch (error) {
+        console.error("Error marking channel messages as read:", error);
+        callback({ success: false });
+      }
+    }, 500), // 500ms debounce
+    [],
+  );
+
   // Mark direct message as read
   const markDirectMessageAsRead = useMutation({
     mutationFn: async (directMessageId: string) => {
-      if (socket?.connected) {
-        return new Promise((resolve, reject) => {
-          socket.emit(
-            "mark_dm_read",
-            { directMessageId },
-            (response: { success: boolean; error?: string }) => {
-              if (response.success) {
-                resolve(response);
-              } else {
-                reject(new Error(response.error || "Failed to mark as read"));
-              }
-            },
-          );
-        });
-      } else {
-        // Fallback to REST API
-        const { data } = await api.post(
-          `/direct-messages/${directMessageId}/read`,
+      return new Promise((resolve) => {
+        // Make a local copy of the socket to avoid dependency issues
+        const currentSocket = socket;
+        debouncedDirectMessageMarkRead(
+          directMessageId,
+          currentSocket,
+          (response: any) => {
+            resolve(response || { success: true });
+          },
         );
-        return data;
-      }
+      });
     },
     onSuccess: () => {
       // Invalidate the unread counts query to trigger a refetch
@@ -148,25 +187,13 @@ export function useMarkAsRead() {
   // Mark channel as read
   const markChannelAsRead = useMutation({
     mutationFn: async (channelId: string) => {
-      if (socket?.connected) {
-        return new Promise((resolve, reject) => {
-          socket.emit(
-            "mark_channel_read",
-            { channelId },
-            (response: { success: boolean; error?: string }) => {
-              if (response.success) {
-                resolve(response);
-              } else {
-                reject(new Error(response.error || "Failed to mark as read"));
-              }
-            },
-          );
+      return new Promise((resolve) => {
+        // Make a local copy of the socket to avoid dependency issues
+        const currentSocket = socket;
+        debouncedChannelMarkRead(channelId, currentSocket, (response: any) => {
+          resolve(response || { success: true });
         });
-      } else {
-        // Fallback to REST API
-        const { data } = await api.post(`/channels/${channelId}/read`);
-        return data;
-      }
+      });
     },
     onSuccess: () => {
       // Invalidate the unread counts query to trigger a refetch

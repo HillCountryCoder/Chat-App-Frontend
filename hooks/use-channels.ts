@@ -1,9 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useSocket } from "@/providers/socket-provider";
-import { Channel, ChannelType, Message } from "@/types/chat";
+import { Channel, ChannelMember, Message } from "@/types/chat";
 
-// Get all channels for the current user
 export function useChannels() {
   return useQuery({
     queryKey: ["channels"],
@@ -14,31 +13,17 @@ export function useChannels() {
   });
 }
 
-// Get a specific channel by ID
-export function useChannel(channelId?: string) {
+export function useChannel(id?: string) {
   return useQuery({
-    queryKey: ["channel", channelId],
+    queryKey: ["channel", id],
     queryFn: async () => {
-      const { data } = await api.get(`/channels/${channelId}`);
+      const { data } = await api.get(`/channels/${id}`);
       return data as Channel;
     },
-    enabled: !!channelId,
+    enabled: !!id,
   });
 }
 
-// Get channel members
-export function useChannelMembers(channelId?: string) {
-  return useQuery({
-    queryKey: ["channel-members", channelId],
-    queryFn: async () => {
-      const { data } = await api.get(`/channels/${channelId}/members`);
-      return data;
-    },
-    enabled: !!channelId,
-  });
-}
-
-// Get channel messages
 export function useChannelMessages(channelId?: string) {
   return useQuery({
     queryKey: ["messages", "channel", channelId],
@@ -50,20 +35,27 @@ export function useChannelMessages(channelId?: string) {
   });
 }
 
-// Send a message to a channel
+export function useChannelMembers(channelId?: string) {
+  return useQuery({
+    queryKey: ["channel-members", channelId],
+    queryFn: async () => {
+      const { data } = await api.get(`/channels/${channelId}/members`);
+      return data as ChannelMember[];
+    },
+    enabled: !!channelId,
+  });
+}
+
 export function useSendChannelMessage() {
   const { socket } = useSocket();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (message: {
-      content: string;
-      channelId: string;
-    }) => {
+    mutationFn: async (message: { content: string; channelId: string }) => {
       // If socket is connected, emit message through socket
       if (socket?.connected) {
         return new Promise((resolve, reject) => {
-          socket.emit("send_channel_message", message, (response: { success: boolean; error?: string }) => {
+          socket.emit("send_channel_message", message, (response: any) => {
             if (response.success) {
               resolve(response);
             } else {
@@ -71,12 +63,14 @@ export function useSendChannelMessage() {
             }
           });
         });
-      }
-      // Fallback to REST API if socket not connected
-      else {
-        const { data } = await api.post(`/channels/${message.channelId}/messages`, {
-          content: message.content
-        });
+      } else {
+        // Fallback to REST API
+        const { data } = await api.post(
+          `/channels/${message.channelId}/messages`,
+          {
+            content: message.content,
+          },
+        );
         return data;
       }
     },
@@ -88,7 +82,6 @@ export function useSendChannelMessage() {
   });
 }
 
-// Create a new channel
 export function useCreateChannel() {
   const queryClient = useQueryClient();
 
@@ -96,7 +89,7 @@ export function useCreateChannel() {
     mutationFn: async (data: {
       name: string;
       description?: string;
-      type: ChannelType;
+      type?: string;
       memberIds: string[];
     }) => {
       const response = await api.post("/channels", data);
@@ -108,12 +101,17 @@ export function useCreateChannel() {
   });
 }
 
-// Add a member to a channel
 export function useAddChannelMember() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ channelId, userId }: { channelId: string; userId: string }) => {
+    mutationFn: async ({
+      channelId,
+      userId,
+    }: {
+      channelId: string;
+      userId: string;
+    }) => {
       const response = await api.post(`/channels/${channelId}/members`, {
         userId,
       });
@@ -127,13 +125,20 @@ export function useAddChannelMember() {
   });
 }
 
-// Remove a member from a channel
 export function useRemoveChannelMember() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ channelId, userId }: { channelId: string; userId: string }) => {
-      const response = await api.delete(`/channels/${channelId}/members/${userId}`);
+    mutationFn: async ({
+      channelId,
+      userId,
+    }: {
+      channelId: string;
+      userId: string;
+    }) => {
+      const response = await api.delete(
+        `/channels/${channelId}/members/${userId}`,
+      );
       return response.data;
     },
     onSuccess: (_, variables) => {

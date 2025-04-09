@@ -1,18 +1,22 @@
+// types/chat.ts
 import { User } from "./user";
 
-// types/chat.ts
 export interface Message {
   _id: string;
   messageId: string;
-  senderId: string;
+  senderId: string | User;
   channelId?: string;
   directMessageId?: string;
-  threadId?: string;
   content: string;
   contentType: string;
   createdAt: string;
   isEdited: boolean;
-  sender?: User;
+  sender?: {
+    _id: string;
+    username: string;
+    displayName: string;
+    avatarUrl?: string;
+  };
 }
 
 export enum ChannelType {
@@ -26,9 +30,9 @@ export interface Channel {
   name: string;
   description?: string;
   type: ChannelType;
-  isArchived: boolean;
   creatorId: string;
-  lastActivity: string;
+  isArchived: boolean;
+  lastActivity?: string;
 }
 
 export interface DirectMessage {
@@ -43,9 +47,19 @@ export interface ChannelMember {
   channelId: string;
   userId: string;
   user?: User;
-  permissions: string[];
   roles: string[];
+  permissions: string[];
   joinedAt: string;
+}
+
+export interface UnreadCount {
+  count: number;
+  lastMessageAt?: string;
+}
+
+export interface UnreadCounts {
+  directMessages: Record<string, number>;
+  channels: Record<string, number>;
 }
 
 export interface Thread {
