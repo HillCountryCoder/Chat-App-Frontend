@@ -41,6 +41,15 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
   const { markChannelAsRead } = useMarkAsRead();
   // Track marked read status with a ref instead of state to avoid re-renders
   const hasMarkedAsReadRef = useRef(false);
+  // Store stable references to objects that shouldn't trigger effect re-runs
+  const queryClientRef = useRef(queryClient);
+  const markAsReadRef = useRef(markChannelAsRead);
+
+  // Update refs when their values change
+  useEffect(() => {
+    queryClientRef.current = queryClient;
+    markAsReadRef.current = markChannelAsRead;
+  }, [queryClient, markChannelAsRead]);
 
   const {
     data: channel,
@@ -63,7 +72,7 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
   useEffect(() => {
     // Mark as read only once per channel visit
     if (channelId && !hasMarkedAsReadRef.current) {
-      markChannelAsRead.mutate(channelId);
+      markAsReadRef.current.mutate(channelId);
       hasMarkedAsReadRef.current = true;
     }
 
@@ -71,7 +80,7 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
     return () => {
       hasMarkedAsReadRef.current = false;
     };
-  }, [channelId, markChannelAsRead]);
+  }, [channelId]);
 
   // Listen for new messages via socket
   useEffect(() => {
@@ -80,13 +89,13 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
     const handleNewMessage = (data: { message: Message }) => {
       if (data.message.channelId === channelId) {
         // Invalidate the query to get new messages
-        queryClient.invalidateQueries({
+        queryClientRef.current.invalidateQueries({
           queryKey: ["messages", "channel", channelId],
         });
 
         // Mark the new message as read since we're in the channel
         if (hasMarkedAsReadRef.current) {
-          markChannelAsRead.mutate(channelId);
+          markAsReadRef.current.mutate(channelId);
         }
       }
     };
@@ -106,7 +115,7 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
       // Leave the channel room when component unmounts
       socket.emit("leave_channel", { channelId });
     };
-  }, [socket, channelId, queryClient, markChannelAsRead]);
+  }, [socket, channelId]); // Only depend on socket and channelId
 
   // Scroll to bottom when messages change
   useEffect(() => {
