@@ -2,6 +2,7 @@
 import { ReactNode } from "react";
 import ChatSidebar from "@/components/chat/ChatSidebar";
 import TopBar from "@/components/chat/TopBar";
+import DocumentTitleUpdater from "@/components/DocumentTitleUpdater";
 
 interface ChatLayoutProps {
   children: ReactNode;
@@ -10,6 +11,7 @@ interface ChatLayoutProps {
 export default function ChatLayout({ children }: ChatLayoutProps) {
   return (
     <div className="flex h-screen bg-background">
+      <DocumentTitleUpdater />
       {/* Sidebar - hidden on mobile, shown on larger screens */}
       <div className="hidden md:block w-64 border-r border-border h-full">
         <ChatSidebar />
