@@ -90,7 +90,9 @@ export default function ConversationList() {
           ? new Date(channel.lastActivity)
           : new Date(0),
         avatar: null,
-        preview: channel.description || `A ${channel.type} channel`,
+        preview: channel.lastMessage
+          ? channel.lastMessage?.content
+          : channel.description || `A ${channel.type} channel`,
         unreadCount: getChannelUnreadCount(channel._id),
         channelType: channel.type,
         originalData: channel,

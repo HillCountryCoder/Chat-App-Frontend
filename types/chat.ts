@@ -33,6 +33,7 @@ export interface Channel {
   creatorId: string;
   isArchived: boolean;
   lastActivity?: string;
+  lastMessage?: Message;
 }
 
 export interface DirectMessage {
