@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useDirectMessages } from "@/hooks/use-chat";
 import { useDirectMessageUsers } from "@/hooks/use-direct-message-users";
@@ -15,6 +15,8 @@ import { useAuthStore } from "@/store/auth-store";
 import { ChannelType } from "@/types/chat";
 import { useUnreadCounts } from "@/hooks/use-unread";
 import UnreadBadge from "./UnreadBadge";
+import { useQueryClient } from "@tanstack/react-query";
+import { useSocket } from "@/providers/socket-provider";
 
 export default function ConversationList() {
   const {
@@ -66,51 +68,59 @@ export default function ConversationList() {
   };
 
   // Combine and sort all conversations by last activity
-  const unifiedConversations = useMemo(() => {
-    const allConversations = [
-      // Map direct messages to a common format
-      ...directMessages.map((dm) => ({
-        id: dm._id,
-        type: "dm",
-        name: getOtherParticipant(dm)?.displayName || "Unknown",
-        lastActivity: new Date(dm.lastActivity),
-        avatar: getOtherParticipant(dm)?.avatarUrl,
-        preview: getLastMessagePreview(dm),
-        unreadCount: getDirectMessageUnreadCount(dm._id),
-        channelType: null,
-        originalData: dm,
-      })),
+  const unifiedConversations = [
+    // Map direct messages to a common format
+    ...directMessages.map((dm) => ({
+      id: dm._id,
+      type: "dm",
+      name: getOtherParticipant(dm)?.displayName || "Unknown",
+      lastActivity: new Date(dm.lastActivity),
+      avatar: getOtherParticipant(dm)?.avatarUrl,
+      preview: getLastMessagePreview(dm),
+      unreadCount: getDirectMessageUnreadCount(dm._id),
+      channelType: null,
+      originalData: dm,
+    })),
 
-      // Map channels to the same format
-      ...channels.map((channel) => ({
-        id: channel._id,
-        type: "channel",
-        name: channel.name,
-        lastActivity: channel.lastActivity
-          ? new Date(channel.lastActivity)
-          : new Date(0),
-        avatar: null,
-        preview: channel.lastMessage
-          ? getLastMessagePreview(channel)
-          : channel.description || `A ${channel.type} channel`,
-        unreadCount: getChannelUnreadCount(channel._id),
-        channelType: channel.type,
-        originalData: channel,
-      })),
-    ];
+    // Map channels to the same format
+    ...channels.map((channel) => ({
+      id: channel._id,
+      type: "channel",
+      name: channel.name,
+      lastActivity: channel.lastActivity
+        ? new Date(channel.lastActivity)
+        : new Date(0),
+      avatar: null,
+      preview: channel.lastMessage
+        ? getLastMessagePreview(channel)
+        : channel.description || `A ${channel.type} channel`,
+      unreadCount: getChannelUnreadCount(channel._id),
+      channelType: channel.type,
+      originalData: channel,
+    })),
+  ].sort((a, b) => b.lastActivity.getTime() - a.lastActivity.getTime());
+  const { socket } = useSocket();
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!socket) return;
 
-    // Sort by last activity (most recent first)
-    return allConversations.sort(
-      (a, b) => b.lastActivity.getTime() - a.lastActivity.getTime(),
-    );
-  }, [
-    directMessages,
-    channels,
-    getOtherParticipant,
-    getDirectMessageUnreadCount,
-    getChannelUnreadCount,
-  ]);
+    const handleNewDirectMessage = () => {
+      queryClient.invalidateQueries({ queryKey: ["direct-messages"] });
+    };
 
+    const handleNewChannelMessage = () => {
+      // Update channels list when a new message arrives
+      queryClient.invalidateQueries({ queryKey: ["channels"] });
+    };
+
+    socket.on("new_direct_message", handleNewDirectMessage);
+    socket.on("new_channel_message", handleNewChannelMessage);
+
+    return () => {
+      socket.off("new_direct_message", handleNewDirectMessage);
+      socket.off("new_channel_message", handleNewChannelMessage);
+    };
+  }, [socket, queryClient]);
   const isLoading = loadingDMs || loadingUsers || loadingChannels;
 
   if (isLoading) {
