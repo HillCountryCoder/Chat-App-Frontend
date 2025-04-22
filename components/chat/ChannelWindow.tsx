@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -103,11 +104,15 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
     socket.on("new_channel_message", handleNewMessage);
 
     // Join the channel room only once when component mounts
-    socket.emit("join_channel", { channelId }, (response: any) => {
-      if (!response.success) {
-        console.error("Failed to join channel room:", response.error);
-      }
-    });
+    socket.emit(
+      "join_channel",
+      { channelId },
+      (response: { success: boolean; error?: string }) => {
+        if (!response.success) {
+          console.error("Failed to join channel room:", response.error);
+        }
+      },
+    );
 
     return () => {
       socket.off("new_channel_message", handleNewMessage);

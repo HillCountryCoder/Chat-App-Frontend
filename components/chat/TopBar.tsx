@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Search, Settings } from "lucide-react";
 import { ModeToggle } from "../theme-toggle";
@@ -8,8 +7,6 @@ import { NavUser } from "../NavUser";
 import { UserActivityStatus } from "./UserActvityStatus";
 
 export default function TopBar() {
-  const [isActive, setIsActive] = useState(true);
-
   return (
     <div className="h-14 border-b border-border flex items-center justify-between px-4">
       <div className="w-1/2">
