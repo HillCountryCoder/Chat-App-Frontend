@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth-store";
 import { jwtDecode } from "jwt-decode";
 import { useLogout } from "@/hooks/use-auth";
-import { X } from "lucide-react";
+import { X, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -17,9 +17,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import Countdown from "react-countdown";
 
-// Helper function to calculate time remaining
-const getTokenRemainingTime = (token: string): number => {
+// Helper function to calculate token expiration time
+const getTokenExpirationTime = (token: string): number => {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const decoded: any = jwtDecode(token);
@@ -27,23 +28,12 @@ const getTokenRemainingTime = (token: string): number => {
     // Check if token has expiration (exp) claim
     if (!decoded.exp) return Infinity;
 
-    // exp is in seconds, Date.now() is in milliseconds
-    const currentTime = Date.now() / 1000;
-    const expiryTime = decoded.exp;
-
-    // Return remaining time in seconds
-    return Math.max(0, expiryTime - currentTime);
+    // exp is in seconds, convert to milliseconds for countdown
+    return decoded.exp * 1000;
   } catch (error) {
     console.error("Error decoding token:", error);
-    return 0; // Return 0 if we can't decode the token
+    return Date.now(); // Return current time if we can't decode the token
   }
-};
-
-// Convert seconds to minutes and seconds format
-const formatTime = (seconds: number): string => {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.floor(seconds % 60);
-  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 };
 
 export default function SessionExpiredAlert() {
@@ -51,36 +41,41 @@ export default function SessionExpiredAlert() {
   const logout = useLogout();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [showWarning, setShowWarning] = useState(false);
+  const [expirationTime, setExpirationTime] = useState<number>(0);
+  const [warningThreshold, setWarningThreshold] = useState<number>(0);
 
   useEffect(() => {
     if (!token) return;
 
-    // Calculate time remaining until token expires
-    const checkExpiration = () => {
-      const remainingTime = getTokenRemainingTime(token);
-      setTimeRemaining(remainingTime);
-
-      // Show warning when less than 5 minutes remaining
-      if (remainingTime > 0 && remainingTime < 300) {
-        setShowWarning(true);
-      } else {
-        setShowWarning(false);
-      }
-
-      // Show expired dialog when token expires
-      if (remainingTime <= 0) {
+    // Get absolute expiration time from token
+    const expTime = getTokenExpirationTime(token);
+    setExpirationTime(expTime);
+    
+    // Set warning to appear 5 minutes before expiration
+    setWarningThreshold(expTime - (300 * 1000));
+    
+    // Check if we should show warning or expired dialog immediately
+    const now = Date.now();
+    
+    if (now >= expTime) {
+      setOpen(true);
+    } else if (now >= warningThreshold) {
+      setShowWarning(true);
+    }
+    
+    // Set up interval to check every 30 seconds
+    const intervalId = setInterval(() => {
+      const currentTime = Date.now();
+      
+      if (currentTime >= expTime) {
         setOpen(true);
         setShowWarning(false);
+        clearInterval(intervalId);
+      } else if (currentTime >= warningThreshold) {
+        setShowWarning(true);
       }
-    };
-
-    // Initial check
-    checkExpiration();
-
-    // Set up interval to check every 30 seconds
-    const intervalId = setInterval(checkExpiration, 30000);
+    }, 30000);
 
     return () => clearInterval(intervalId);
   }, [token]);
@@ -100,6 +95,19 @@ export default function SessionExpiredAlert() {
 
   const handleDismiss = () => {
     setShowWarning(false);
+  };
+
+  // Custom renderer for countdown
+  const countdownRenderer = ({ minutes, seconds, completed }: { minutes: number, seconds: number, completed: boolean }) => {
+    if (completed) {
+      return <span>Expired</span>;
+    } else {
+      return (
+        <span>
+          {minutes}:{seconds < 10 ? `0${seconds}` : seconds}
+        </span>
+      );
+    }
   };
 
   return (
@@ -124,25 +132,27 @@ export default function SessionExpiredAlert() {
       {/* Session Warning Alert */}
       {showWarning && (
         <div className="fixed bottom-4 right-4 z-50 max-w-md">
-          <Alert
-            variant="warning"
-            className="border-yellow-200 bg-yellow-100 text-yellow-800 dark:border-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
-          >
-            <AlertTitle className="font-semibold">
-              Session expiring soon
-            </AlertTitle>
+          <Alert variant="warning">
+            <Clock className="size-4" />
+            <AlertTitle>Session expiring soon</AlertTitle>
             <AlertDescription>
               <div className="flex flex-col gap-2">
                 <p>
-                  Your session will expire in {formatTime(timeRemaining)}. Would
-                  you like to stay logged in?
+                  Your session will expire in{" "}
+                  <span className="font-semibold">
+                    <Countdown 
+                      date={expirationTime} 
+                      renderer={countdownRenderer}
+                      onComplete={() => setOpen(true)}
+                    />
+                  </span>
+                  . Would you like to stay logged in?
                 </p>
                 <div className="flex justify-end gap-2 mt-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleLogout}
-                    className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
                   >
                     Log Out
                   </Button>
@@ -156,9 +166,9 @@ export default function SessionExpiredAlert() {
                 </div>
               </div>
             </AlertDescription>
-            <Button
-              variant="ghost"
-              size="icon"
+            <Button 
+              variant="ghost" 
+              size="icon" 
               className="absolute top-2 right-2 h-6 w-6"
               onClick={handleDismiss}
             >
