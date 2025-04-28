@@ -2,14 +2,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useSocket } from "@/providers/socket-provider";
 import { Channel, ChannelMember, Message } from "@/types/chat";
+import { useAuthStore } from "@/store/auth-store";
 
 export function useChannels() {
+  const { isAuthenticated } = useAuthStore();
   return useQuery({
     queryKey: ["channels"],
     queryFn: async () => {
       const { data } = await api.get("/channels");
       return data as Channel[];
     },
+    enabled: isAuthenticated,
   });
 }
 

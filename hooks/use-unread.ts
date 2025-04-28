@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useSocket } from "@/providers/socket-provider";
 import { useCallback, useEffect, useState } from "react";
 import { debounce } from "lodash";
+import { useAuthStore } from "@/store/auth-store";
 
 // Types for unread counts
 export interface UnreadCounts {
@@ -19,7 +20,7 @@ export function useUnreadCounts() {
     directMessages: {},
     channels: {},
   });
-
+  const { isAuthenticated } = useAuthStore();
   // Fetch initial unread counts
   const { data, isLoading, error } = useQuery({
     queryKey: ["unread-counts"],
@@ -33,6 +34,7 @@ export function useUnreadCounts() {
         return { directMessages: {}, channels: {} } as UnreadCounts;
       }
     },
+    enabled: isAuthenticated,
     // Still return empty counts on error
     staleTime: 30000, // 30 seconds
   });

@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { useSocket } from "@/providers/socket-provider";
 import { DirectMessage, Message } from "@/types/chat";
 import { User } from "@/types/user";
+import { useAuthStore } from "@/store/auth-store";
 
 export function useMessages(channelId?: string, directMessageId?: string) {
   const endpoint = directMessageId
@@ -88,23 +89,26 @@ export function useSendMessage() {
 }
 
 export function useDirectMessages() {
+  const { isAuthenticated } = useAuthStore();
   return useQuery({
     queryKey: ["direct-messages"],
     queryFn: async () => {
       const { data } = await api.get("/direct-messages");
       return data as DirectMessage[];
     },
+    enabled: isAuthenticated,
   });
 }
 
 export function useDirectMessage(id?: string) {
+  const { isAuthenticated } = useAuthStore();
   return useQuery({
     queryKey: ["direct-message", id],
     queryFn: async () => {
       const { data } = await api.get(`/direct-messages/${id}`);
       return data as DirectMessage;
     },
-    enabled: !!id,
+    enabled: isAuthenticated && !!id,
   });
 }
 export function useRecipient(userId?: string) {
