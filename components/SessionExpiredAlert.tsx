@@ -26,6 +26,7 @@ const getTokenExpirationTime = (token: string): number => {
     const decoded: any = jwtDecode(token);
 
     // Check if token has expiration (exp) claim
+    console.log(decoded);
     if (!decoded.exp) return Infinity;
 
     // exp is in seconds, convert to milliseconds for countdown
@@ -43,36 +44,38 @@ export default function SessionExpiredAlert() {
   const [open, setOpen] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [expirationTime, setExpirationTime] = useState<number>(0);
-  const [warningThreshold, setWarningThreshold] = useState<number>(0);
 
   useEffect(() => {
     if (!token) return;
 
     // Get absolute expiration time from token
     const expTime = getTokenExpirationTime(token);
+    console.log("Expiration time:", new Date(expTime).toISOString());
     setExpirationTime(expTime);
-    
+
     // Set warning to appear 5 minutes before expiration
-    setWarningThreshold(expTime - (300 * 1000));
-    
+    const warning = expTime - 300 * 1000;
+    console.log("Warning threshold:", new Date(warning).toISOString());
+
     // Check if we should show warning or expired dialog immediately
     const now = Date.now();
-    
+    console.log("Current time:", new Date(now).toISOString());
+
     if (now >= expTime) {
       setOpen(true);
-    } else if (now >= warningThreshold) {
+    } else if (now >= warning) {
       setShowWarning(true);
     }
-    
+
     // Set up interval to check every 30 seconds
     const intervalId = setInterval(() => {
       const currentTime = Date.now();
-      
+
       if (currentTime >= expTime) {
         setOpen(true);
         setShowWarning(false);
         clearInterval(intervalId);
-      } else if (currentTime >= warningThreshold) {
+      } else if (currentTime >= warning) {
         setShowWarning(true);
       }
     }, 30000);
@@ -98,10 +101,29 @@ export default function SessionExpiredAlert() {
   };
 
   // Custom renderer for countdown
-  const countdownRenderer = ({ minutes, seconds, completed }: { minutes: number, seconds: number, completed: boolean }) => {
+  const countdownRenderer = ({
+    hours,
+    minutes,
+    seconds,
+    completed,
+  }: {
+    hours: number;
+    minutes: number;
+    seconds: number;
+    completed: boolean;
+  }) => {
     if (completed) {
       return <span>Expired</span>;
     } else {
+      // Include hours in the display if present
+      if (hours > 0) {
+        return (
+          <span>
+            {hours}:{minutes < 10 ? `0${minutes}` : minutes}:
+            {seconds < 10 ? `0${seconds}` : seconds}
+          </span>
+        );
+      }
       return (
         <span>
           {minutes}:{seconds < 10 ? `0${seconds}` : seconds}
@@ -140,8 +162,8 @@ export default function SessionExpiredAlert() {
                 <p>
                   Your session will expire in{" "}
                   <span className="font-semibold">
-                    <Countdown 
-                      date={expirationTime} 
+                    <Countdown
+                      date={expirationTime}
                       renderer={countdownRenderer}
                       onComplete={() => setOpen(true)}
                     />
@@ -149,11 +171,7 @@ export default function SessionExpiredAlert() {
                   . Would you like to stay logged in?
                 </p>
                 <div className="flex justify-end gap-2 mt-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleLogout}
-                  >
+                  <Button variant="outline" size="sm" onClick={handleLogout}>
                     Log Out
                   </Button>
                   <Button
@@ -166,9 +184,9 @@ export default function SessionExpiredAlert() {
                 </div>
               </div>
             </AlertDescription>
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
               className="absolute top-2 right-2 h-6 w-6"
               onClick={handleDismiss}
             >
