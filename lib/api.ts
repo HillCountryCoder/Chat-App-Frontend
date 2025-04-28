@@ -3,6 +3,8 @@ import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
 import { createErrorFromResponse } from "@/lib/errors/factory";
 import { BaseError } from "@/lib/errors";
 import { useAuthStore } from "@/store/auth-store";
+import { isTokenExpired } from "@/hooks/use-auth-persistence";
+import Cookies from "js-cookie";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
 
@@ -15,7 +17,22 @@ export const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token;
+  // Check token validity before sending the request
   if (token) {
+    if (isTokenExpired(token)) {
+      console.warn("Token expired, logging out user");
+      // Clean up on next event loop to prevent state updates during render
+      setTimeout(() => {
+        useAuthStore.getState().actions.logout();
+        Cookies.remove("token");
+        // Use window.location instead of redirect() for cleaner redirect outside of React components
+        window.location.href = "/login";
+      }, 0);
+
+      // Throw an error to abort the current request
+      throw new axios.Cancel("Operation canceled due to expired token");
+    }
+
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;

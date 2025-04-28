@@ -10,15 +10,20 @@ import {
 import { Socket } from "socket.io-client";
 import { connectSocket, disconnectSocket, getSocket } from "@/lib/socket";
 import { useAuthStore } from "@/store/auth-store";
+import { useRouter } from "next/navigation";
+import Cookies from "js-cookie";
+import { isTokenExpired } from "@/hooks/use-auth-persistence";
 
 type SocketContextType = {
   socket: Socket | null;
   isConnected: boolean;
+  reconnect: () => void;
 };
 
 const SocketContext = createContext<SocketContextType>({
   socket: null,
   isConnected: false,
+  reconnect: () => {},
 });
 
 export const useSocket = () => useContext(SocketContext);
@@ -26,9 +31,38 @@ export const useSocket = () => useContext(SocketContext);
 export function SocketProvider({ children }: { children: ReactNode }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, token, actions } = useAuthStore();
+  const router = useRouter();
+
+  // Function to reconnect socket with fresh token
+  const reconnect = () => {
+    if (isAuthenticated) {
+      const currentToken = useAuthStore.getState().token;
+
+      // Only attempt reconnection if token is valid
+      if (currentToken && !isTokenExpired(currentToken)) {
+        if (getSocket()) {
+          disconnectSocket();
+        }
+
+        const socketInstance = connectSocket();
+        setSocket(socketInstance);
+
+        // No need to re-add event listeners as they'll be set in the main effect
+      }
+    }
+  };
 
   useEffect(() => {
+    // Check token validity
+    if (token && isTokenExpired(token)) {
+      console.warn("Token expired, logging out user");
+      actions.logout();
+      Cookies.remove("token");
+      router.push("/login");
+      return;
+    }
+
     if (!isAuthenticated) {
       if (getSocket()?.connected) {
         disconnectSocket();
@@ -39,32 +73,52 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     }
 
     const socketInstance = connectSocket();
-    if (socketInstance) {
-      setSocket(socketInstance);
+    setSocket(socketInstance);
 
-      function onConnect() {
-        setIsConnected(true);
-        console.log("Socket connected");
-      }
-
-      function onDisconnect() {
-        setIsConnected(false);
-        console.log("Socket disconnected");
-      }
-
-      socketInstance.on("connect", onConnect);
-      socketInstance.on("disconnect", onDisconnect);
-
-      setIsConnected(socketInstance.connected);
-
-      return () => {
-        socketInstance.off("connect", onConnect);
-        socketInstance.off("disconnect", onDisconnect);
-      };
+    function onConnect() {
+      setIsConnected(true);
+      console.log("Socket connected");
     }
-  }, [isAuthenticated]);
+
+    function onDisconnect(reason: string) {
+      setIsConnected(false);
+      console.log("Socket disconnected:", reason);
+    }
+
+    function onConnectError(err: Error) {
+      console.error("Socket connection error:", err.message);
+
+      // Check for authentication errors
+      if (
+        err.message.includes("Authentication") ||
+        err.message.includes("Unauthorized") ||
+        err.message.includes("auth") ||
+        err.message.includes("token")
+      ) {
+        console.error(
+          "Authentication error in socket connection. Logging out user.",
+        );
+        actions.logout();
+        Cookies.remove("token");
+        router.push("/login");
+      }
+    }
+
+    socketInstance.on("connect", onConnect);
+    socketInstance.on("disconnect", onDisconnect);
+    socketInstance.on("connect_error", onConnectError);
+
+    setIsConnected(socketInstance.connected);
+
+    return () => {
+      socketInstance.off("connect", onConnect);
+      socketInstance.off("disconnect", onDisconnect);
+      socketInstance.off("connect_error", onConnectError);
+    };
+  }, [isAuthenticated, token, actions, router]);
+
   return (
-    <SocketContext.Provider value={{ socket, isConnected }}>
+    <SocketContext.Provider value={{ socket, isConnected, reconnect }}>
       {children}
     </SocketContext.Provider>
   );

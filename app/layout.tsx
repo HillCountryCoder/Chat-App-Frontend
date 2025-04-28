@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import "./globals.css";
 import { ErrorProvider } from "@/providers/error-providers";
 import { ThemeProvider } from "@/providers/theme-provider";
+import SessionExpiredAlert from "@/components/SessionExpiredAlert";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -45,6 +46,7 @@ export default function RootLayout({
                 <SocketProvider>
                   {children}
                   <Toaster richColors position="top-right" />
+                  <SessionExpiredAlert />
                 </SocketProvider>
               </ErrorProvider>
             </QueryProvider>
