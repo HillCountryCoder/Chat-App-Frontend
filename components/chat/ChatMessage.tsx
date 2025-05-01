@@ -1,12 +1,15 @@
-import { Message } from "@/types/chat";
+import { useState, useRef } from "react";
+import { Message, Reaction } from "@/types/chat";
 import { useAuthStore } from "@/store/auth-store";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
 import { Check } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { User } from "@/types/user";
+import MessageReactions from "./MessageReactions";
+import MessageReactionMenu from "./MessageReactionMenu";
+import { useSocket } from "@/providers/socket-provider";
 
 interface ChatMessageProps {
   message: Message;
@@ -15,6 +18,10 @@ interface ChatMessageProps {
 
 export default function ChatMessage({ message, recipient }: ChatMessageProps) {
   const { user: currentUser } = useAuthStore();
+  const { socket } = useSocket();
+  const [showReactionMenu, setShowReactionMenu] = useState(false);
+  const [localReactions, setLocalReactions] = useState(message.reactions || []);
+  const messageRef = useRef<HTMLDivElement>(null);
 
   // Handle both cases: when senderId is a string or an object (populated by MongoDB)
   const senderIdValue =
@@ -62,25 +69,71 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
     ? currentUser
     : senderData || sender || recipient;
 
+  // Handle reaction selection
+  const handleReactionSelect = (emoji: string) => {
+    if (!socket || !currentUser) return;
+
+    const existingReaction = localReactions.find((r) => r.emoji === emoji);
+    const userReacted = existingReaction?.users.includes(currentUser._id);
+
+    if (userReacted) {
+      // User already reacted, so remove reaction
+      socket.emit(
+        "remove_reaction",
+        { messageId: message._id, emoji },
+        (response: any) => {
+          if (response.success) {
+            setLocalReactions(response.reactions);
+          }
+        },
+      );
+    } else {
+      // User hasn't reacted, so add reaction
+      socket.emit(
+        "add_reaction",
+        { messageId: message._id, emoji },
+        (response: any) => {
+          if (response.success) {
+            setLocalReactions(response.reactions);
+          }
+        },
+      );
+    }
+
+    setShowReactionMenu(false);
+  };
+
+  // Update reactions when they change
+  const handleReactionsChange = (messageId: string, reactions: Reaction[]) => {
+    if (messageId === message._id) {
+      setLocalReactions(reactions);
+    }
+  };
+
+  // Format time (HH:MM AM/PM) without using date-fns
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  };
+
   return (
     <div
       className={cn(
-        "flex items-end mb-4",
+        "group relative flex items-end mb-4",
         isOwnMessage ? "justify-end" : "justify-start",
       )}
+      onMouseEnter={() => setShowReactionMenu(true)}
+      onMouseLeave={() => setShowReactionMenu(false)}
+      ref={messageRef}
     >
       {!isOwnMessage && (
         <Avatar className="h-8 w-8 mr-2">
           <AvatarImage
-            src={
-              messageUser?.displayName
-                ? messageUser?.displayName
-                : messageUser?.avatarUrl
-            }
+            src={messageUser?.avatarUrl || ""}
             alt={messageUser?.displayName || ""}
           />
           <AvatarFallback className="bg-primary/20">
-            {messageUser?.displayName?.charAt(0,2) || "?"}
+            {messageUser?.displayName?.charAt(0) || "?"}
           </AvatarFallback>
         </Avatar>
       )}
@@ -108,14 +161,37 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
             isOwnMessage ? "justify-end" : "justify-start",
           )}
         >
-          <span>{format(new Date(message.createdAt), "h:mm a")}</span>
+          <span>{formatTime(message.createdAt)}</span>
           {isOwnMessage && (
             <div className="ml-1 flex items-center">
               <Check className="h-3 w-3" />
             </div>
           )}
         </div>
+
+        {localReactions.length > 0 && (
+          <MessageReactions
+            messageId={message._id}
+            reactions={localReactions}
+            onReactionChange={handleReactionsChange}
+          />
+        )}
       </div>
+
+      {/* Reaction menu (visible on hover) */}
+      {showReactionMenu && (
+        <div
+          className={cn(
+            "absolute -top-10",
+            isOwnMessage ? "right-0" : "left-10",
+          )}
+        >
+          <MessageReactionMenu
+            messageId={message._id}
+            onReactionSelect={handleReactionSelect}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-"use client";
-
 import { Fragment, useEffect, useRef, useState } from "react";
 import {
   useChannel,
@@ -9,20 +7,19 @@ import {
   useSendChannelMessage,
 } from "@/hooks/use-channels";
 import { useSocket } from "@/providers/socket-provider";
-import { Message, ChannelType } from "@/types/chat";
+import { Message, ChannelType, Reaction } from "@/types/chat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ChatMessage from "./ChatMessage";
 import MessageDate from "./MessageDate";
-import { isSameDay } from "date-fns";
 import {
-  PaperclipIcon,
+  Paperclip,
   Send,
   Loader2,
   Users,
   Phone,
   Video,
-  InfoIcon,
+  Info,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "../ui/skeleton";
@@ -36,21 +33,15 @@ interface ChannelWindowProps {
 export default function ChannelWindow({ channelId }: ChannelWindowProps) {
   const [newMessage, setNewMessage] = useState("");
   const [showMembers, setShowMembers] = useState(false);
+  const [messageReactions, setMessageReactions] = useState<
+    Record<string, Reaction[]>
+  >({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { socket, isConnected } = useSocket();
   const queryClient = useQueryClient();
   const { markChannelAsRead } = useMarkAsRead();
   // Track marked read status with a ref instead of state to avoid re-renders
   const hasMarkedAsReadRef = useRef(false);
-  // Store stable references to objects that shouldn't trigger effect re-runs
-  const queryClientRef = useRef(queryClient);
-  const markAsReadRef = useRef(markChannelAsRead);
-
-  // Update refs when their values change
-  useEffect(() => {
-    queryClientRef.current = queryClient;
-    markAsReadRef.current = markChannelAsRead;
-  }, [queryClient, markChannelAsRead]);
 
   const {
     data: channel,
@@ -73,7 +64,7 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
   useEffect(() => {
     // Mark as read only once per channel visit
     if (channelId && !hasMarkedAsReadRef.current) {
-      markAsReadRef.current.mutate(channelId);
+      markChannelAsRead.mutate(channelId);
       hasMarkedAsReadRef.current = true;
     }
 
@@ -81,7 +72,20 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
     return () => {
       hasMarkedAsReadRef.current = false;
     };
-  }, [channelId]);
+  }, [channelId, markChannelAsRead]);
+
+  // Initialize message reactions
+  useEffect(() => {
+    const reactionsMap: Record<string, Reaction[]> = {};
+
+    messages.forEach((message) => {
+      if (message.reactions && message.reactions.length > 0) {
+        reactionsMap[message._id] = message.reactions;
+      }
+    });
+
+    setMessageReactions(reactionsMap);
+  }, [messages]);
 
   // Listen for new messages via socket
   useEffect(() => {
@@ -90,13 +94,13 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
     const handleNewMessage = (data: { message: Message }) => {
       if (data.message.channelId === channelId) {
         // Invalidate the query to get new messages
-        queryClientRef.current.invalidateQueries({
+        queryClient.invalidateQueries({
           queryKey: ["messages", "channel", channelId],
         });
 
         // Mark the new message as read since we're in the channel
         if (hasMarkedAsReadRef.current) {
-          markAsReadRef.current.mutate(channelId);
+          markChannelAsRead.mutate(channelId);
         }
       }
     };
@@ -104,15 +108,11 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
     socket.on("new_channel_message", handleNewMessage);
 
     // Join the channel room only once when component mounts
-    socket.emit(
-      "join_channel",
-      { channelId },
-      (response: { success: boolean; error?: string }) => {
-        if (!response.success) {
-          console.error("Failed to join channel room:", response.error);
-        }
-      },
-    );
+    socket.emit("join_channel", { channelId }, (response: any) => {
+      if (!response.success) {
+        console.error("Failed to join channel room:", response.error);
+      }
+    });
 
     return () => {
       socket.off("new_channel_message", handleNewMessage);
@@ -120,32 +120,68 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
       // Leave the channel room when component unmounts
       socket.emit("leave_channel", { channelId });
     };
-  }, [socket, channelId]); // Only depend on socket and channelId
+  }, [socket, channelId, queryClient, markChannelAsRead]);
+
+  // Listen for reaction updates
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleReactionUpdate = (data: {
+      messageId: string;
+      reactions: Reaction[];
+    }) => {
+      setMessageReactions((prev) => ({
+        ...prev,
+        [data.messageId]: data.reactions,
+      }));
+    };
+
+    socket.on("message_reaction_updated", handleReactionUpdate);
+
+    return () => {
+      socket.off("message_reaction_updated", handleReactionUpdate);
+    };
+  }, [socket]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, messageReactions]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!newMessage.trim()) return;
 
-    try {
-      await sendMessageMutation.mutateAsync({
+    sendMessageMutation.mutate(
+      {
         content: newMessage,
         channelId,
-      });
-
-      setNewMessage("");
-    } catch (error) {
-      console.error("Failed to send message:", error);
-    }
+      },
+      {
+        onSuccess: () => {
+          setNewMessage("");
+        },
+        onError: (error) => {
+          console.error("Failed to send message:", error);
+        },
+      },
+    );
   };
 
   const toggleMembersDrawer = () => {
     setShowMembers(!showMembers);
+  };
+
+  // Check if two dates are the same day
+  const areSameDay = (date1: string, date2: string) => {
+    const d1 = new Date(date1);
+    const d2 = new Date(date2);
+    return (
+      d1.getDate() === d2.getDate() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getFullYear() === d2.getFullYear()
+    );
   };
 
   const isLoading = channelLoading || messagesLoading;
@@ -201,7 +237,7 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
             <Users size={18} />
           </Button>
           <Button size="icon" variant="ghost">
-            <InfoIcon size={18} />
+            <Info size={18} />
           </Button>
         </div>
       </div>
@@ -228,17 +264,27 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
               // Check if we need to display a date separator
               const showDateSeparator =
                 index === 0 ||
-                !isSameDay(
-                  new Date(reversedArray[index - 1].createdAt),
-                  new Date(message.createdAt),
+                !areSameDay(
+                  reversedArray[index - 1].createdAt,
+                  message.createdAt,
                 );
+
+              // Get reactions for this message
+              const reactions =
+                messageReactions[message._id] || message.reactions || [];
+
+              // Create a new message object with reactions
+              const messageWithReactions = {
+                ...message,
+                reactions,
+              };
 
               return (
                 <Fragment key={message._id}>
                   {showDateSeparator && (
                     <MessageDate date={message.createdAt} />
                   )}
-                  <ChatMessage message={message} />
+                  <ChatMessage message={messageWithReactions} />
                 </Fragment>
               );
             })}
@@ -249,9 +295,9 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
 
       {/* Input */}
       <div className="p-4 border-t border-border">
-        <form onSubmit={handleSendMessage} className="flex gap-2">
-          <Button type="button" size="icon" variant="ghost">
-            <PaperclipIcon size={18} />
+        <div className="flex gap-2">
+          <Button type="button" size="icon" variant="ghost" onClick={() => {}}>
+            <Paperclip size={18} />
           </Button>
           <Input
             value={newMessage}
@@ -259,9 +305,15 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
             placeholder="Type a message..."
             className="flex-1"
             disabled={channel?.type === ChannelType.ANNOUNCEMENT}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage(e);
+              }
+            }}
           />
           <Button
-            type="submit"
+            onClick={handleSendMessage}
             size="icon"
             disabled={
               !newMessage.trim() ||
@@ -275,7 +327,7 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
               <Send size={18} />
             )}
           </Button>
-        </form>
+        </div>
       </div>
 
       {/* Channel Members Drawer */}

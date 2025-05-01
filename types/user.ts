@@ -5,6 +5,7 @@ export interface User {
   displayName: string;
   avatarUrl?: string;
   status: UserStatus;
+  lastSeen?: string;
 }
 
 export enum UserStatus {

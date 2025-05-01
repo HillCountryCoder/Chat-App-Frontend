@@ -1,6 +1,10 @@
 // types/chat.ts
 import { User } from "./user";
-
+export interface Reaction {
+  emoji: string;
+  count: number;
+  users: string[];
+}
 export interface Message {
   _id: string;
   messageId: string;
@@ -11,6 +15,7 @@ export interface Message {
   contentType: string;
   createdAt: string;
   isEdited: boolean;
+  reactions: Reaction[];
   sender?: {
     _id: string;
     username: string;

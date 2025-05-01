@@ -1,19 +1,14 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-"use client";
-
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useMessages, useSendMessage, useRecipient } from "@/hooks/use-chat";
 import { useAuthStore } from "@/store/auth-store";
 import { useSocket } from "@/providers/socket-provider";
-import { Message } from "@/types/chat";
+import { Message, Reaction } from "@/types/chat";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ChatMessage from "./ChatMessage";
 import MessageDate from "./MessageDate";
-import { isSameDay } from "date-fns";
-import { formatDistanceToNow } from "date-fns";
-import { Phone, Video, PaperclipIcon, Send, Loader2 } from "lucide-react";
+import { Phone, Video, Paperclip, Send, Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "../ui/skeleton";
 import { useMarkAsRead } from "@/hooks/use-unread";
@@ -28,6 +23,9 @@ export default function ChatWindow({
   recipientId,
 }: ChatWindowProps) {
   const [newMessage, setNewMessage] = useState("");
+  const [messageReactions, setMessageReactions] = useState<
+    Record<string, Reaction[]>
+  >({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { socket, isConnected } = useSocket();
   const { user } = useAuthStore();
@@ -47,16 +45,23 @@ export default function ChatWindow({
 
   // Mark messages as read when entering the chat
   useEffect(() => {
-    let isMounted = true;
-
     if (directMessageId) {
       markDirectMessageAsRead.mutate(directMessageId);
     }
+  }, [directMessageId, markDirectMessageAsRead]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [directMessageId]);
+  // Initialize message reactions
+  useEffect(() => {
+    const reactionsMap: Record<string, Reaction[]> = {};
+
+    messages.forEach((message) => {
+      if (message.reactions && message.reactions.length > 0) {
+        reactionsMap[message._id] = message.reactions;
+      }
+    });
+
+    setMessageReactions(reactionsMap);
+  }, [messages]);
 
   // Listen for new messages via socket
   useEffect(() => {
@@ -81,26 +86,89 @@ export default function ChatWindow({
     }
   }, [socket, directMessageId, queryClient, markDirectMessageAsRead]);
 
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleReactionUpdate = (data: {
+      messageId: string;
+      reactions: Reaction[];
+    }) => {
+      // Update the messageReactions state directly when reaction events come in
+      setMessageReactions((prev) => ({
+        ...prev,
+        [data.messageId]: data.reactions,
+      }));
+
+      // Also invalidate the query to ensure consistency with server state
+      queryClient.invalidateQueries({
+        queryKey: ["messages", "direct", directMessageId],
+      });
+    };
+
+    socket.on("message_reaction_updated", handleReactionUpdate);
+
+    return () => {
+      socket.off("message_reaction_updated", handleReactionUpdate);
+    };
+  }, [socket, directMessageId, queryClient]);
+
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, messageReactions]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!newMessage.trim()) return;
 
-    try {
-      await sendMessageMutation.mutateAsync({
+    sendMessageMutation.mutate(
+      {
         content: newMessage,
         directMessageId,
-      });
+      },
+      {
+        onSuccess: () => {
+          setNewMessage("");
+        },
+        onError: (error) => {
+          console.error("Failed to send message:", error);
+        },
+      },
+    );
+  };
 
-      setNewMessage("");
-    } catch (error) {
-      console.error("Failed to send message:", error);
-    }
+  // Check if two dates are the same day (without date-fns)
+  const areSameDay = (date1: string, date2: string) => {
+    const d1 = new Date(date1);
+    const d2 = new Date(date2);
+    return (
+      d1.getDate() === d2.getDate() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getFullYear() === d2.getFullYear()
+    );
+  };
+
+  // Format time (last active)
+  const formatLastActive = (dateString?: string) => {
+    if (!dateString) return "Unknown";
+
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMinutes = Math.floor(
+      (now.getTime() - date.getTime()) / (1000 * 60),
+    );
+
+    if (diffMinutes < 1) return "Just now";
+    if (diffMinutes < 60)
+      return `${diffMinutes} minute${diffMinutes > 1 ? "s" : ""} ago`;
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24)
+      return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
   };
 
   const isLoading = messagesLoading || recipientLoading;
@@ -142,8 +210,7 @@ export default function ChatWindow({
               <p className="text-xs text-muted-foreground">
                 {recipient?.status === "online"
                   ? "Active now"
-                  : "Last active " +
-                    formatDistanceToNow(new Date(), { addSuffix: true })}
+                  : `Last active ${formatLastActive(recipient?.lastSeen)}`}
               </p>
             </div>
           </div>
@@ -180,17 +247,30 @@ export default function ChatWindow({
               // Check if we need to display a date separator
               const showDateSeparator =
                 index === 0 ||
-                !isSameDay(
-                  new Date(reversedArray[index - 1].createdAt),
-                  new Date(message.createdAt),
+                !areSameDay(
+                  reversedArray[index - 1].createdAt,
+                  message.createdAt,
                 );
+
+              // Get reactions for this message
+              const reactions =
+                messageReactions[message._id] || message.reactions || [];
+
+              // Create a new message object with reactions
+              const messageWithReactions = {
+                ...message,
+                reactions,
+              };
 
               return (
                 <Fragment key={message._id}>
                   {showDateSeparator && (
                     <MessageDate date={message.createdAt} />
                   )}
-                  <ChatMessage message={message} recipient={recipient} />
+                  <ChatMessage
+                    message={messageWithReactions}
+                    recipient={recipient}
+                  />
                 </Fragment>
               );
             })}
@@ -201,18 +281,24 @@ export default function ChatWindow({
 
       {/* Input */}
       <div className="p-4 border-t border-border">
-        <form onSubmit={handleSendMessage} className="flex gap-2">
-          <Button type="button" size="icon" variant="ghost">
-            <PaperclipIcon size={18} />
+        <div className="flex gap-2">
+          <Button type="button" size="icon" variant="ghost" onClick={() => {}}>
+            <Paperclip size={18} />
           </Button>
           <Input
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type a message..."
             className="flex-1"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage(e);
+              }
+            }}
           />
           <Button
-            type="submit"
+            onClick={handleSendMessage}
             size="icon"
             disabled={!newMessage.trim() || sendMessageMutation.isPending}
           >
@@ -222,7 +308,7 @@ export default function ChatWindow({
               <Send size={18} />
             )}
           </Button>
-        </form>
+        </div>
       </div>
     </div>
   );
