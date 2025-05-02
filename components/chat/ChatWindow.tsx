@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useMessages, useSendMessage, useRecipient } from "@/hooks/use-chat";
-import { useAuthStore } from "@/store/auth-store";
 import { useSocket } from "@/providers/socket-provider";
 import { Message, Reaction } from "@/types/chat";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -27,8 +26,7 @@ export default function ChatWindow({
     Record<string, Reaction[]>
   >({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { socket, isConnected } = useSocket();
-  const { user } = useAuthStore();
+  const { socket } = useSocket();
   const queryClient = useQueryClient();
   const { markDirectMessageAsRead } = useMarkAsRead();
 
@@ -87,19 +85,18 @@ export default function ChatWindow({
   }, [socket, directMessageId, queryClient, markDirectMessageAsRead]);
 
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !directMessageId) return;
+
+    socket.emit("join_direct_message", { directMessageId });
 
     const handleReactionUpdate = (data: {
       messageId: string;
       reactions: Reaction[];
     }) => {
-      // Update the messageReactions state directly when reaction events come in
       setMessageReactions((prev) => ({
         ...prev,
         [data.messageId]: data.reactions,
       }));
-
-      // Also invalidate the query to ensure consistency with server state
       queryClient.invalidateQueries({
         queryKey: ["messages", "direct", directMessageId],
       });
@@ -107,8 +104,10 @@ export default function ChatWindow({
 
     socket.on("message_reaction_updated", handleReactionUpdate);
 
+    // Clean up BOTH when component unmounts
     return () => {
       socket.off("message_reaction_updated", handleReactionUpdate);
+      socket.emit("leave_direct_message", { directMessageId });
     };
   }, [socket, directMessageId, queryClient]);
 
@@ -137,17 +136,6 @@ export default function ChatWindow({
       },
     );
   };
-  useEffect(() => {
-    if (socket && directMessageId) {
-      // Join the DM-specific room
-      socket.emit("join_direct_message", { directMessageId });
-
-      return () => {
-        // Leave when unmounting
-        socket.emit("leave_direct_message", { directMessageId });
-      };
-    }
-  }, [socket, directMessageId]);
 
   // Check if two dates are the same day (without date-fns)
   const areSameDay = (date1: string, date2: string) => {
