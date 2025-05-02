@@ -137,6 +137,17 @@ export default function ChatWindow({
       },
     );
   };
+  useEffect(() => {
+    if (socket && directMessageId) {
+      // Join the DM-specific room
+      socket.emit("join_direct_message", { directMessageId });
+
+      return () => {
+        // Leave when unmounting
+        socket.emit("leave_direct_message", { directMessageId });
+      };
+    }
+  }, [socket, directMessageId]);
 
   // Check if two dates are the same day (without date-fns)
   const areSameDay = (date1: string, date2: string) => {
