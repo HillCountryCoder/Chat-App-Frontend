@@ -3,13 +3,14 @@ import { Message, Reaction } from "@/types/chat";
 import { useAuthStore } from "@/store/auth-store";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { Check } from "lucide-react";
+import { Check, SmilePlus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { User } from "@/types/user";
 import MessageReactions from "./MessageReactions";
 import MessageReactionMenu from "./MessageReactionMenu";
 import { useSocket } from "@/providers/socket-provider";
+import { Button } from "../ui/button";
 
 interface ChatMessageProps {
   message: Message;
@@ -22,6 +23,7 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
   const [showReactionMenu, setShowReactionMenu] = useState(false);
   const [localReactions, setLocalReactions] = useState(message.reactions || []);
   const messageRef = useRef<HTMLDivElement>(null);
+  const [showPickerTrigger, setShowPickerTrigger] = useState(false);
 
   // Handle both cases: when senderId is a string or an object (populated by MongoDB)
   const senderIdValue =
@@ -72,7 +74,10 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
   // Handle reaction selection
   const handleReactionSelect = (emoji: string) => {
     if (!socket || !currentUser) return;
-
+    console.log(
+      "Handling reaction in ChatMessage triggered from socket add_reaction callback event",
+      emoji,
+    );
     const existingReaction = localReactions.find((r) => r.emoji === emoji);
     const userReacted = existingReaction?.users.includes(currentUser._id);
 
@@ -122,9 +127,9 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
         "group relative flex items-end mb-4",
         isOwnMessage ? "justify-end" : "justify-start",
       )}
-      onMouseEnter={() => setShowReactionMenu(true)}
-      onMouseLeave={() => setShowReactionMenu(false)}
       ref={messageRef}
+      onMouseEnter={() => setShowPickerTrigger(true)}
+      onMouseLeave={() => setShowPickerTrigger(false)}
     >
       {!isOwnMessage && (
         <Avatar className="h-8 w-8 mr-2">
@@ -145,16 +150,30 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
         )}
       >
         <div
-          className={cn(
-            "px-4 py-2 rounded-2xl",
-            isOwnMessage
-              ? "bg-chat-message-bg text-chat-message-fg rounded-br-none"
-              : "bg-muted text-foreground rounded-bl-none",
-          )}
+          className={`flex ${
+            isOwnMessage ? "flex-row-reverse" : ""
+          } items-center gap-2`}
         >
-          <p>{message.content}</p>
+          <div
+            className={cn(
+              "px-4 py-2 rounded-2xl",
+              isOwnMessage
+                ? "bg-chat-message-bg text-chat-message-fg rounded-br-none"
+                : "bg-muted text-foreground rounded-bl-none",
+            )}
+          >
+            <p>{message.content}</p>
+          </div>
+          {showPickerTrigger && (
+            <Button
+              variant="ghost"
+              className="p-1 cursor-pointer hover:bg-accent/20 hover:rounded-full"
+              onClick={() => setShowReactionMenu(!showReactionMenu)}
+            >
+              <SmilePlus className="w-5 h-5" />
+            </Button>
+          )}
         </div>
-
         <div
           className={cn(
             "flex items-center mt-1 text-xs text-muted-chat-fg",

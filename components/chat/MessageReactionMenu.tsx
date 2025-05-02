@@ -30,11 +30,12 @@ export default function MessageReactionMenu({
   // Handle selecting a quick reaction
   const handleQuickReaction = (emoji: string) => {
     if (!socket || !user) return;
-
+    console.log("Adding quick reaction in MessageReactionMenu", emoji);
     socket.emit(
       "add_reaction",
       { messageId, emoji },
       (response: { success: boolean; reactions: Reaction[] }) => {
+        console.log("Reaction response in MessageReactionMenu", response);
         if (response.success && onReactionSelect) {
           onReactionSelect(emoji);
         }
