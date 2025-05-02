@@ -154,6 +154,22 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
     };
   }, [socket]);
 
+  useEffect(() => {
+    if (!socket || !channelId) return;
+
+    // Join the channel-specific room for receiving reactions and other updates
+    socket.emit("join_channel_room", { channelId }, (response: any) => {
+      if (!response.success) {
+        console.error("Failed to join channel room:", response.error);
+      }
+    });
+
+    return () => {
+      // Leave the channel room when unmounting
+      socket.emit("leave_channel_room", { channelId });
+    };
+  }, [socket, channelId]);
+
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
