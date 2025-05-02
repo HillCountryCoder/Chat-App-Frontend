@@ -9,7 +9,7 @@ import {
   useSendChannelMessage,
 } from "@/hooks/use-channels";
 import { useSocket } from "@/providers/socket-provider";
-import { Message, ChannelType } from "@/types/chat";
+import { Message, ChannelType, Reaction } from "@/types/chat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ChatMessage from "./ChatMessage";
@@ -43,7 +43,9 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
   const hasMarkedAsReadRef = useRef(false);
   const queryClientRef = useRef(queryClient);
   const markAsReadRef = useRef(markChannelAsRead);
-
+  const [messageReactions, setMessageReactions] = useState<
+    Record<string, Reaction[]>
+  >({});
   // Update refs when their values change
   useEffect(() => {
     queryClientRef.current = queryClient;
@@ -80,6 +82,18 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
       hasMarkedAsReadRef.current = false;
     };
   }, [channelId]);
+
+  useEffect(() => {
+    const reactionsMap: Record<string, Reaction[]> = {};
+
+    messages.forEach((message) => {
+      if (message.reactions && message.reactions.length > 0) {
+        reactionsMap[message._id] = message.reactions;
+      }
+    });
+
+    setMessageReactions(reactionsMap);
+  }, [messages]);
 
   // Listen for new messages via socket
   useEffect(() => {
@@ -119,6 +133,26 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
       socket.emit("leave_channel", { channelId });
     };
   }, [socket, channelId]); // Only depend on socket and channelId
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleReactionUpdate = (data: {
+      messageId: string;
+      reactions: Reaction[];
+    }) => {
+      setMessageReactions((prev) => ({
+        ...prev,
+        [data.messageId]: data.reactions,
+      }));
+    };
+
+    socket.on("message_reaction_updated", handleReactionUpdate);
+
+    return () => {
+      socket.off("message_reaction_updated", handleReactionUpdate);
+    };
+  }, [socket]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -230,13 +264,22 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
                   new Date(reversedArray[index - 1].createdAt),
                   new Date(message.createdAt),
                 );
+              // Get reactions for this message
+              const reactions =
+                messageReactions[message._id] || message.reactions || [];
+
+              // Create a new message object with reactions
+              const messageWithReactions = {
+                ...message,
+                reactions,
+              };
 
               return (
                 <Fragment key={message._id}>
                   {showDateSeparator && (
                     <MessageDate date={message.createdAt} />
                   )}
-                  <ChatMessage message={message} />
+                  <ChatMessage message={messageWithReactions} />
                 </Fragment>
               );
             })}
