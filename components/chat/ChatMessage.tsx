@@ -17,6 +17,11 @@ interface ChatMessageProps {
   recipient?: User; // Pass recipient from parent component
 }
 
+interface ReactionResponse {
+  success: boolean;
+  reactions: Reaction[];
+}
+
 export default function ChatMessage({ message, recipient }: ChatMessageProps) {
   const { user: currentUser } = useAuthStore();
   const { socket } = useSocket();
@@ -86,7 +91,7 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
       socket.emit(
         "remove_reaction",
         { messageId: message._id, emoji },
-        (response: any) => {
+        (response: ReactionResponse) => {
           if (response.success) {
             setLocalReactions(response.reactions);
           }
@@ -97,7 +102,7 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
       socket.emit(
         "add_reaction",
         { messageId: message._id, emoji },
-        (response: any) => {
+        (response: ReactionResponse) => {
           if (response.success) {
             setLocalReactions(response.reactions);
           }
