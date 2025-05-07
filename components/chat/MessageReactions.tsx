@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, memo } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -29,11 +29,14 @@ interface MessageReactionsProps {
   onReactionChange?: (messageId: string, reactions: Reaction[]) => void;
 }
 
-export default function MessageReactions({
+function MessageReactions({
   messageId,
   reactions = [],
   onReactionChange,
 }: MessageReactionsProps) {
+  console.log(
+    `Rendering MessageReactions for ${messageId} with ${reactions.length} reactions`,
+  );
   const [showPicker, setShowPicker] = useState(false);
   const { socket } = useSocket();
   const { user } = useAuthStore();
@@ -52,18 +55,26 @@ export default function MessageReactions({
 
     if (reaction && hasUserReacted(reaction)) {
       // User already reacted, so remove reaction
-      socket.emit("remove_reaction", { messageId, emoji }, (response: any) => {
-        if (response.success && onReactionChange) {
-          onReactionChange(messageId, response.reactions);
-        }
-      });
+      socket.emit(
+        "remove_reaction",
+        { messageId, emoji },
+        (response: { success: boolean; reactions: Reaction[] }) => {
+          if (response.success && onReactionChange) {
+            onReactionChange(messageId, response.reactions);
+          }
+        },
+      );
     } else {
       // User hasn't reacted, so add reaction
-      socket.emit("add_reaction", { messageId, emoji }, (response: any) => {
-        if (response.success && onReactionChange) {
-          onReactionChange(messageId, response.reactions);
-        }
-      });
+      socket.emit(
+        "add_reaction",
+        { messageId, emoji },
+        (response: { success: boolean; reactions: Reaction[] }) => {
+          if (response.success && onReactionChange) {
+            onReactionChange(messageId, response.reactions);
+          }
+        },
+      );
     }
   };
 
@@ -98,6 +109,7 @@ export default function MessageReactions({
       messageId: string;
       reactions: Reaction[];
     }) => {
+      console.log("Received reaction update in MessageReactions", data);
       if (data.messageId === messageId && onReactionChange) {
         onReactionChange(messageId, data.reactions);
       }
@@ -165,3 +177,15 @@ export default function MessageReactions({
     </div>
   );
 }
+export default memo(MessageReactions, (prevProps, nextProps) => {
+  // Only re-render if the reactions array has actually changed in content
+  if (prevProps.messageId !== nextProps.messageId) return false;
+
+  if (prevProps.reactions.length !== nextProps.reactions.length) return false;
+
+  // Compare the reactions more deeply
+  const prevReactions = JSON.stringify(prevProps.reactions);
+  const nextReactions = JSON.stringify(nextProps.reactions);
+
+  return prevReactions === nextReactions;
+});

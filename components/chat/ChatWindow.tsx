@@ -40,7 +40,17 @@ export default function ChatWindow({
     useRecipient(recipientId);
 
   const sendMessageMutation = useSendMessage();
+  useEffect(() => {
+    if (!socket || !directMessageId) return;
 
+    // Join the direct message room immediately when component mounts
+    socket.emit("join_direct_message", { directMessageId });
+
+    return () => {
+      // Leave the room when component unmounts
+      socket.emit("leave_direct_message", { directMessageId });
+    };
+  }, [socket, directMessageId]);
   // Mark messages as read when entering the chat
   useEffect(() => {
     if (directMessageId) {
@@ -84,32 +94,30 @@ export default function ChatWindow({
     }
   }, [socket, directMessageId, queryClient, markDirectMessageAsRead]);
 
+  // In ChatWindow.tsx, update the message reactions effect
   useEffect(() => {
-    if (!socket || !directMessageId) return;
-
-    socket.emit("join_direct_message", { directMessageId });
+    if (!socket) return;
 
     const handleReactionUpdate = (data: {
       messageId: string;
       reactions: Reaction[];
     }) => {
-      setMessageReactions((prev) => ({
-        ...prev,
-        [data.messageId]: data.reactions,
-      }));
-      queryClient.invalidateQueries({
-        queryKey: ["messages", "direct", directMessageId],
+      console.log("Received reaction update in ChatWindow", data);
+
+      // Update local state
+      setMessageReactions((prev) => {
+        const newState = { ...prev };
+        newState[data.messageId] = [...data.reactions]; // Make sure to create a new array
+        return newState;
       });
     };
 
     socket.on("message_reaction_updated", handleReactionUpdate);
 
-    // Clean up BOTH when component unmounts
     return () => {
       socket.off("message_reaction_updated", handleReactionUpdate);
-      socket.emit("leave_direct_message", { directMessageId });
     };
-  }, [socket, directMessageId, queryClient]);
+  }, [socket]); // Only depend on socket
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -260,9 +268,13 @@ export default function ChatWindow({
                 ...message,
                 reactions,
               };
-
+              const reactionsKey = messageReactions[message._id]
+                ? messageReactions[message._id]
+                    .map((r) => `${r.emoji}-${r.count}`)
+                    .join("_")
+                : "no-reactions";
               return (
-                <Fragment key={message._id}>
+                <Fragment key={`${message._id}-${reactionsKey}`}>
                   {showDateSeparator && (
                     <MessageDate date={message.createdAt} />
                   )}
