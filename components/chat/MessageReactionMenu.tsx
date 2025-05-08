@@ -9,7 +9,6 @@ import { useSocket } from "@/providers/socket-provider";
 import { useAuthStore } from "@/store/auth-store";
 import EmojiPicker from "emoji-picker-react";
 import { Reaction } from "@/types/chat";
-import { useReaction } from "@/hooks/use-reaction";
 
 // Common quick-reaction emojis
 const QuickReactions = ["👍", "❤️", "😂", "😢", "🙏", "👎", "😡"];
@@ -27,7 +26,6 @@ export default function MessageReactionMenu({
   const { socket } = useSocket();
   const { user } = useAuthStore();
   const pickerRef = useRef<HTMLDivElement>(null);
-  const { closeAllMenus } = useReaction();
 
   // Handle selecting a quick reaction
   const handleQuickReaction = (emoji: string) => {
