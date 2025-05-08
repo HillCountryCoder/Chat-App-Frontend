@@ -1,20 +1,14 @@
-import React, { useState, useRef, useEffect, memo } from "react";
+import React, { memo, useEffect } from "react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Plus } from "lucide-react";
 import { useSocket } from "@/providers/socket-provider";
 import { useAuthStore } from "@/store/auth-store";
-import EmojiPicker from "emoji-picker-react";
 import { cn } from "@/lib/utils";
+import { useReaction } from "@/hooks/use-reaction";
 
 // Type for reaction prop
 interface Reaction {
@@ -34,13 +28,9 @@ function MessageReactions({
   reactions = [],
   onReactionChange,
 }: MessageReactionsProps) {
-  console.log(
-    `Rendering MessageReactions for ${messageId} with ${reactions.length} reactions`,
-  );
-  const [showPicker, setShowPicker] = useState(false);
   const { socket } = useSocket();
   const { user } = useAuthStore();
-  const popoverRef = useRef<HTMLDivElement>(null);
+  const { closeAllMenus } = useReaction();
 
   // Track if user has reacted with each emoji
   const hasUserReacted = (reaction: Reaction) => {
@@ -76,30 +66,10 @@ function MessageReactions({
         },
       );
     }
+
+    // Close any open menus after clicking on a reaction
+    closeAllMenus();
   };
-
-  // Handle selecting an emoji from the picker
-  const handleSelectEmoji = (emojiData: { emoji: string }) => {
-    handleReactionClick(emojiData.emoji);
-    setShowPicker(false);
-  };
-
-  // Close popover when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(event.target as Node)
-      ) {
-        setShowPicker(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
 
   // Listen for reaction updates from socket
   useEffect(() => {
@@ -109,7 +79,6 @@ function MessageReactions({
       messageId: string;
       reactions: Reaction[];
     }) => {
-      console.log("Received reaction update in MessageReactions", data);
       if (data.messageId === messageId && onReactionChange) {
         onReactionChange(messageId, data.reactions);
       }
@@ -124,8 +93,6 @@ function MessageReactions({
 
   // Format user names for tooltip
   const formatUserNames = (reaction: Reaction) => {
-    // Note: In a real implementation, you would fetch user details by IDs
-    // and display actual names instead of IDs
     return reaction.users
       .map((userId) => (userId === user?._id ? "You" : userId))
       .join(", ");
@@ -154,29 +121,10 @@ function MessageReactions({
           </Tooltip>
         </TooltipProvider>
       ))}
-
-      <Popover open={showPicker} onOpenChange={setShowPicker}>
-        <PopoverTrigger asChild>
-          <button
-            className="p-1 rounded-full bg-muted hover:bg-muted/80"
-            onClick={() => setShowPicker(true)}
-          >
-            <Plus size={14} />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="p-0 border-none shadow-lg" ref={popoverRef}>
-          <EmojiPicker
-            onEmojiClick={handleSelectEmoji}
-            searchDisabled
-            skinTonesDisabled
-            width={300}
-            height={400}
-          />
-        </PopoverContent>
-      </Popover>
     </div>
   );
 }
+
 export default memo(MessageReactions, (prevProps, nextProps) => {
   // Only re-render if the reactions array has actually changed in content
   if (prevProps.messageId !== nextProps.messageId) return false;

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useRef, useState } from "react";
 import { Message, Reaction } from "@/types/chat";
 import { useAuthStore } from "@/store/auth-store";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -11,6 +11,7 @@ import MessageReactions from "./MessageReactions";
 import MessageReactionMenu from "./MessageReactionMenu";
 import { useSocket } from "@/providers/socket-provider";
 import { Button } from "../ui/button";
+import { useReaction } from "@/hooks/use-reaction";
 
 interface ChatMessageProps {
   message: Message;
@@ -25,10 +26,21 @@ interface ReactionResponse {
 export default function ChatMessage({ message, recipient }: ChatMessageProps) {
   const { user: currentUser } = useAuthStore();
   const { socket } = useSocket();
-  const [showReactionMenu, setShowReactionMenu] = useState(false);
   const [localReactions, setLocalReactions] = useState(message.reactions || []);
   const messageRef = useRef<HTMLDivElement>(null);
   const [showPickerTrigger, setShowPickerTrigger] = useState(false);
+
+  // Use our reaction context
+  const {
+    activeMessageId,
+    setActiveMessageId,
+    isMenuOpen,
+    setIsMenuOpen,
+    closeAllMenus,
+  } = useReaction();
+
+  // Check if this message's menu is active
+  const isActive = activeMessageId === message._id;
 
   // Handle both cases: when senderId is a string or an object (populated by MongoDB)
   const senderIdValue =
@@ -76,13 +88,22 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
     ? currentUser
     : senderData || sender || recipient;
 
+  // Toggle the reaction menu
+  const toggleReactionMenu = () => {
+    if (isActive) {
+      // If this message's menu is already open, close it
+      closeAllMenus();
+    } else {
+      // Otherwise, set this message as active and open its menu
+      setActiveMessageId(message._id);
+      setIsMenuOpen(true);
+    }
+  };
+
   // Handle reaction selection
   const handleReactionSelect = (emoji: string) => {
     if (!socket || !currentUser) return;
-    console.log(
-      "Handling reaction in ChatMessage triggered from socket add_reaction callback event",
-      emoji,
-    );
+
     const existingReaction = localReactions.find((r) => r.emoji === emoji);
     const userReacted = existingReaction?.users.includes(currentUser._id);
 
@@ -110,7 +131,8 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
       );
     }
 
-    setShowReactionMenu(false);
+    // Close the menu after selecting
+    closeAllMenus();
   };
 
   // Update reactions when they change
@@ -126,15 +148,19 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
     return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   };
 
+  // Show emoji trigger only if no menu is open or this message's menu is open
+  const shouldShowTrigger = !isMenuOpen || isActive;
+
   return (
     <div
       className={cn(
         "group relative flex items-end mb-4",
         isOwnMessage ? "justify-end" : "justify-start",
+        isActive && "z-10", // Increase z-index when active
       )}
       ref={messageRef}
-      onMouseEnter={() => setShowPickerTrigger(true)}
-      onMouseLeave={() => setShowPickerTrigger(false)}
+      onMouseEnter={() => shouldShowTrigger && setShowPickerTrigger(true)}
+      onMouseLeave={() => !isActive && setShowPickerTrigger(false)}
     >
       {!isOwnMessage && (
         <Avatar className="h-8 w-8 mr-2">
@@ -161,19 +187,21 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
         >
           <div
             className={cn(
-              "px-4 py-2 rounded-2xl",
+              "px-4 py-2 rounded-2xl transition-colors",
               isOwnMessage
                 ? "bg-chat-message-bg text-chat-message-fg rounded-br-none"
                 : "bg-muted text-foreground rounded-bl-none",
+              isActive && "shadow-[inset_0_0_0_1000px_rgba(0,0,0,0.2)]", // Highlight when active
             )}
           >
             <p>{message.content}</p>
           </div>
-          {showPickerTrigger && (
+          {(showPickerTrigger || isActive) && shouldShowTrigger && (
             <Button
               variant="ghost"
               className="p-1 cursor-pointer hover:bg-accent/20 hover:rounded-full"
-              onClick={() => setShowReactionMenu(!showReactionMenu)}
+              onClick={toggleReactionMenu}
+              data-reaction-trigger="true"
             >
               <SmilePlus className="w-5 h-5" />
             </Button>
@@ -202,13 +230,14 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
         )}
       </div>
 
-      {/* Reaction menu (visible on hover) */}
-      {showReactionMenu && (
+      {/* Reaction menu (visible only when this message is active) */}
+      {isActive && (
         <div
           className={cn(
             "absolute -top-10",
             isOwnMessage ? "right-0" : "left-10",
           )}
+          data-reaction-menu="true"
         >
           <MessageReactionMenu
             messageId={message._id}

@@ -9,6 +9,7 @@ import { useSocket } from "@/providers/socket-provider";
 import { useAuthStore } from "@/store/auth-store";
 import EmojiPicker from "emoji-picker-react";
 import { Reaction } from "@/types/chat";
+import { useReaction } from "@/hooks/use-reaction";
 
 // Common quick-reaction emojis
 const QuickReactions = ["👍", "❤️", "😂", "😢", "🙏", "👎", "😡"];
@@ -26,6 +27,7 @@ export default function MessageReactionMenu({
   const { socket } = useSocket();
   const { user } = useAuthStore();
   const pickerRef = useRef<HTMLDivElement>(null);
+  const { closeAllMenus } = useReaction();
 
   // Handle selecting a quick reaction
   const handleQuickReaction = (emoji: string) => {
@@ -57,7 +59,10 @@ export default function MessageReactionMenu({
   };
 
   return (
-    <div className="bg-background/90 backdrop-blur-sm border border-border rounded-full p-1 shadow-md flex items-center gap-1">
+    <div
+      className="bg-background/90 backdrop-blur-sm border border-border rounded-full p-1 shadow-md flex items-center gap-1"
+      data-reaction-menu="true"
+    >
       {QuickReactions.map((emoji) => (
         <button
           key={emoji}
@@ -77,7 +82,11 @@ export default function MessageReactionMenu({
             <Plus size={18} />
           </button>
         </PopoverTrigger>
-        <PopoverContent className="p-0 border-none shadow-lg" ref={pickerRef}>
+        <PopoverContent
+          className="p-0 border-none shadow-lg"
+          ref={pickerRef}
+          data-reaction-menu="true"
+        >
           <EmojiPicker
             onEmojiClick={handleSelectEmoji}
             searchDisabled
