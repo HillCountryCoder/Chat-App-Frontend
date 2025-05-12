@@ -170,17 +170,29 @@ export default function ChatMessage({
         {message.replyTo && (
           <div
             className={cn(
-              "flex items-center gap-2 text-xs text-muted-foreground mb-1",
+              "flex gap-2 mb-2",
               isOwnMessage ? "justify-end" : "justify-start",
             )}
           >
-            <Reply className="h-3 w-3" />
-            <span>
-              Replying to {message.replyTo.senderId.displayName || "Unknown"}
-            </span>
-            <span className="truncate max-w-[150px] text-muted-foreground/70">
-              {message.replyTo.content}
-            </span>
+            <div
+              className={cn(
+                "flex items-start gap-2 bg-muted/50 rounded-md p-2",
+                isOwnMessage ? "flex-row-reverse" : "flex-row",
+              )}
+            >
+              <div className="w-1 bg-primary/50 rounded-full shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1 mb-0.5">
+                  <Reply className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-xs font-medium text-primary">
+                    {message.replyTo.senderId.displayName || "Unknown"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground line-clamp-2">
+                  {message.replyTo.content}
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
