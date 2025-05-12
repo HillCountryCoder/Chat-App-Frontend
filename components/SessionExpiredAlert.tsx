@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/auth-store";
 import { jwtDecode } from "jwt-decode";
 import { useLogout } from "@/hooks/use-auth";
@@ -26,7 +26,6 @@ const getTokenExpirationTime = (token: string): number => {
     const decoded: any = jwtDecode(token);
 
     // Check if token has expiration (exp) claim
-    console.log(decoded);
     if (!decoded.exp) return Infinity;
 
     // exp is in seconds, convert to milliseconds for countdown
@@ -37,33 +36,42 @@ const getTokenExpirationTime = (token: string): number => {
   }
 };
 
+// Auth routes where session alerts should not be shown
+const authRoutes = [
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+];
+
 export default function SessionExpiredAlert() {
   const { token } = useAuthStore();
   const logout = useLogout();
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [expirationTime, setExpirationTime] = useState<number>(0);
 
+  // Don't show any alerts if we're on auth routes
+  const shouldShowAlerts = !authRoutes.includes(pathname);
+
   useEffect(() => {
-    if (!token) return;
+    if (!token || !shouldShowAlerts) return;
 
     // Get absolute expiration time from token
     const expTime = getTokenExpirationTime(token);
-    console.log("Expiration time:", new Date(expTime).toISOString());
     setExpirationTime(expTime);
 
     // Set warning to appear 5 minutes before expiration
-    const warning = expTime - 300 * 1000;
-    console.log("Warning threshold:", new Date(warning).toISOString());
+    const warningTime = expTime - 300 * 1000;
 
     // Check if we should show warning or expired dialog immediately
     const now = Date.now();
-    console.log("Current time:", new Date(now).toISOString());
 
     if (now >= expTime) {
       setOpen(true);
-    } else if (now >= warning) {
+    } else if (now >= warningTime) {
       setShowWarning(true);
     }
 
@@ -75,13 +83,13 @@ export default function SessionExpiredAlert() {
         setOpen(true);
         setShowWarning(false);
         clearInterval(intervalId);
-      } else if (currentTime >= warning) {
+      } else if (currentTime >= warningTime) {
         setShowWarning(true);
       }
     }, 30000);
 
     return () => clearInterval(intervalId);
-  }, [token]);
+  }, [token, shouldShowAlerts]);
 
   const handleLogout = async () => {
     await logout.mutateAsync();
@@ -94,6 +102,7 @@ export default function SessionExpiredAlert() {
     // Here you would implement logic to refresh the token
     // For this example, we'll just dismiss the warning
     setShowWarning(false);
+    // TODO: Implement token refresh logic
   };
 
   const handleDismiss = () => {
@@ -131,6 +140,11 @@ export default function SessionExpiredAlert() {
       );
     }
   };
+
+  // Don't render anything if we're on auth routes
+  if (!shouldShowAlerts) {
+    return null;
+  }
 
   return (
     <>

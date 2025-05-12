@@ -8,7 +8,8 @@ const authRoutes = [
   "/forgot-password",
   "/reset-password",
 ];
-const protectedRoutes = ["/chat"];
+const protectedRoutes = ["/", "/chat"];
+
 const isTokenExpired = (token: string): boolean => {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -25,8 +26,21 @@ const isTokenExpired = (token: string): boolean => {
     return true; // If we can't decode it, treat as expired
   }
 };
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Don't process auth routes for token checks
+  if (authRoutes.includes(pathname)) {
+    // If on auth routes, clear any expired tokens but don't redirect
+    const token = request.cookies.get("token")?.value;
+    if (token && isTokenExpired(token)) {
+      const response = NextResponse.next();
+      response.cookies.delete("token");
+      return response;
+    }
+    return NextResponse.next();
+  }
 
   // Try to get token from cookie
   const token = request.cookies.get("token")?.value;
@@ -36,22 +50,19 @@ export function middleware(request: NextRequest) {
   const headerToken = authHeader?.startsWith("Bearer ")
     ? authHeader.substring(7)
     : null;
-  if (token && isTokenExpired(token)) {
-    // Token expired, clean up and redirect to login
-    setTimeout(() => {
-      request.cookies.delete("token");
-      window.location.href = "/login";
-    }, 0);
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
-  const isAuthenticated = !!(token || headerToken);
 
-  // Handle root path specifically - redirect to chat if authenticated, login if not
-  if (pathname === "/") {
-    if (isAuthenticated) {
-      return NextResponse.redirect(new URL("/chat", request.url));
-    } else {
-      return NextResponse.redirect(new URL("/login", request.url));
+  let isAuthenticated = false;
+
+  // Check if we have a token and if it's not expired
+  if (token || headerToken) {
+    const tokenToCheck = token || headerToken;
+    if (tokenToCheck && !isTokenExpired(tokenToCheck)) {
+      isAuthenticated = true;
+    } else if (token && isTokenExpired(token)) {
+      // Token is expired, delete it and redirect to login
+      const response = NextResponse.redirect(new URL("/login", request.url));
+      response.cookies.delete("token");
+      return response;
     }
   }
 
@@ -64,7 +75,7 @@ export function middleware(request: NextRequest) {
   }
 
   // If authenticated and trying to access auth routes
-  if (isAuthenticated && authRoutes.some((route) => pathname === route)) {
+  if (isAuthenticated && authRoutes.includes(pathname)) {
     return NextResponse.redirect(new URL("/chat", request.url));
   }
 
@@ -72,15 +83,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/",
-    "/chat",
-    "/login",
-    "/register",
-    "/forgot-password",
-    "/reset-password",
-    "/profile/:path*",
-    "/chat/:path*",
-    "/settings/:path*",
-  ],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };

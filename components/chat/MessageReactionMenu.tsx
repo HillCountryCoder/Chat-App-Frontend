@@ -10,7 +10,6 @@ import { useAuthStore } from "@/store/auth-store";
 import EmojiPicker from "emoji-picker-react";
 import { Reaction } from "@/types/chat";
 
-// Common quick-reaction emojis
 const QuickReactions = ["👍", "❤️", "😂", "😢", "🙏", "👎", "😡"];
 
 interface MessageReactionMenuProps {
@@ -27,7 +26,6 @@ export default function MessageReactionMenu({
   const { user } = useAuthStore();
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  // Handle selecting a quick reaction
   const handleQuickReaction = (emoji: string) => {
     if (!socket || !user) return;
 
@@ -43,14 +41,12 @@ export default function MessageReactionMenu({
       (response: { success: boolean; reactions: Reaction[] }) => {
         console.log("Reaction response:", response);
         if (response.success) {
-          // Call the callback without depending on the response
           onReactionSelect(emoji);
         }
       },
     );
   };
 
-  // Handle selecting an emoji from the picker
   const handleSelectEmoji = (emojiData: { emoji: string }) => {
     onReactionSelect(emojiData.emoji);
     setShowPicker(false);
