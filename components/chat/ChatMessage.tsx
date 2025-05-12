@@ -3,7 +3,7 @@ import { Message, Reaction } from "@/types/chat";
 import { useAuthStore } from "@/store/auth-store";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { Check, SmilePlus } from "lucide-react";
+import { Check, MoreVertical, Reply, SmilePlus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { User } from "@/types/user";
@@ -15,7 +15,8 @@ import { useReaction } from "@/hooks/use-reaction";
 
 interface ChatMessageProps {
   message: Message;
-  recipient?: User; // Pass recipient from parent component
+  recipient?: User;
+  onReply?: (message: Message) => void;
 }
 
 interface ReactionResponse {
@@ -23,14 +24,16 @@ interface ReactionResponse {
   reactions: Reaction[];
 }
 
-export default function ChatMessage({ message, recipient }: ChatMessageProps) {
+export default function ChatMessage({
+  message,
+  recipient,
+  onReply,
+}: ChatMessageProps) {
   const { user: currentUser } = useAuthStore();
   const { socket } = useSocket();
   const [localReactions, setLocalReactions] = useState(message.reactions || []);
   const messageRef = useRef<HTMLDivElement>(null);
-  const [showPickerTrigger, setShowPickerTrigger] = useState(false);
-
-  // Use our reaction context
+  const [showActions, setShowActions] = useState(false);
   const {
     activeMessageId,
     setActiveMessageId,
@@ -39,16 +42,19 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
     closeAllMenus,
   } = useReaction();
 
-  // Check if this message's menu is active
+  const handleReply = () => {
+    if (onReply) {
+      onReply(message);
+    }
+  };
+
   const isActive = activeMessageId === message._id;
 
-  // Handle both cases: when senderId is a string or an object (populated by MongoDB)
   const senderIdValue =
     typeof message.senderId === "object"
       ? (message.senderId as unknown as User)._id
       : message.senderId;
 
-  // Get sender data from populated field if available
   const senderData =
     typeof message.senderId === "object"
       ? (message.senderId as unknown as User)
@@ -56,26 +62,17 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
 
   const isOwnMessage = senderIdValue === currentUser?._id;
 
-  // Only fetch if we don't already have sender data
   const { data: sender } = useQuery({
     queryKey: ["user", senderIdValue],
     queryFn: async () => {
-      // Don't fetch if it's the current user's message
       if (isOwnMessage) return currentUser;
-
-      // If we already have sender data from the populated field, use that
       if (senderData) return senderData;
-
-      // If sender is the recipient, use that data
       if (recipient && recipient._id === senderIdValue) {
         return recipient;
       }
-
-      // Otherwise fetch the user data
       const { data } = await api.get(`/users/${senderIdValue}`);
       return data;
     },
-    // Only fetch if needed and if we have an ID
     enabled:
       !!senderIdValue &&
       !senderData &&
@@ -83,24 +80,19 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
       (!recipient || recipient._id !== senderIdValue),
   });
 
-  // Determine which user data to use
   const messageUser = isOwnMessage
     ? currentUser
     : senderData || sender || recipient;
 
-  // Toggle the reaction menu
   const toggleReactionMenu = () => {
     if (isActive) {
-      // If this message's menu is already open, close it
       closeAllMenus();
     } else {
-      // Otherwise, set this message as active and open its menu
       setActiveMessageId(message._id);
       setIsMenuOpen(true);
     }
   };
 
-  // Handle reaction selection
   const handleReactionSelect = (emoji: string) => {
     if (!socket || !currentUser) return;
 
@@ -108,7 +100,6 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
     const userReacted = existingReaction?.users.includes(currentUser._id);
 
     if (userReacted) {
-      // User already reacted, so remove reaction
       socket.emit(
         "remove_reaction",
         { messageId: message._id, emoji },
@@ -119,7 +110,6 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
         },
       );
     } else {
-      // User hasn't reacted, so add reaction
       socket.emit(
         "add_reaction",
         { messageId: message._id, emoji },
@@ -131,24 +121,20 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
       );
     }
 
-    // Close the menu after selecting
     closeAllMenus();
   };
 
-  // Update reactions when they change
   const handleReactionsChange = (messageId: string, reactions: Reaction[]) => {
     if (messageId === message._id) {
       setLocalReactions(reactions);
     }
   };
 
-  // Format time (HH:MM AM/PM) without using date-fns
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   };
 
-  // Show emoji trigger only if no menu is open or this message's menu is open
   const shouldShowTrigger = !isMenuOpen || isActive;
 
   return (
@@ -156,11 +142,11 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
       className={cn(
         "group relative flex items-end mb-4",
         isOwnMessage ? "justify-end" : "justify-start",
-        isActive && "z-10", // Increase z-index when active
+        isActive && "z-10",
       )}
       ref={messageRef}
-      onMouseEnter={() => shouldShowTrigger && setShowPickerTrigger(true)}
-      onMouseLeave={() => !isActive && setShowPickerTrigger(false)}
+      onMouseEnter={() => shouldShowTrigger && setShowActions(true)}
+      onMouseLeave={() => !isActive && setShowActions(false)}
     >
       {!isOwnMessage && (
         <Avatar className="h-8 w-8 mr-2">
@@ -180,10 +166,28 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
           isOwnMessage ? "items-end" : "items-start",
         )}
       >
+        {/* Reply Preview */}
+        {message.replyTo && (
+          <div
+            className={cn(
+              "flex items-center gap-2 text-xs text-muted-foreground mb-1",
+              isOwnMessage ? "justify-end" : "justify-start",
+            )}
+          >
+            <Reply className="h-3 w-3" />
+            <span>
+              Replying to {message.replyTo.senderId.displayName || "Unknown"}
+            </span>
+            <span className="truncate max-w-[150px] text-muted-foreground/70">
+              {message.replyTo.content}
+            </span>
+          </div>
+        )}
+
         <div
           className={`flex ${
             isOwnMessage ? "flex-row-reverse" : ""
-          } items-center gap-2`}
+          } items-start gap-2`}
         >
           <div
             className={cn(
@@ -191,22 +195,43 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
               isOwnMessage
                 ? "bg-chat-message-bg text-chat-message-fg rounded-br-none"
                 : "bg-muted text-foreground rounded-bl-none",
-              isActive && "shadow-[inset_0_0_0_1000px_rgba(0,0,0,0.2)]", // Highlight when active
+              isActive && "shadow-[inset_0_0_0_1000px_rgba(0,0,0,0.2)]",
             )}
           >
             <p>{message.content}</p>
           </div>
-          {(showPickerTrigger || isActive) && shouldShowTrigger && (
-            <Button
-              variant="ghost"
-              className="p-1 cursor-pointer hover:bg-accent/20 hover:rounded-full"
-              onClick={toggleReactionMenu}
-              data-reaction-trigger="true"
+
+          {/* Message Actions */}
+          {showActions && (
+            <div
+              className={cn(
+                "flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity",
+                isOwnMessage ? "order-1" : "order-2",
+              )}
             >
-              <SmilePlus className="w-5 h-5" />
-            </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={handleReply}
+              >
+                <Reply className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={toggleReactionMenu}
+              >
+                <SmilePlus className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </div>
           )}
         </div>
+
         <div
           className={cn(
             "flex items-center mt-1 text-xs text-muted-chat-fg",
@@ -230,7 +255,7 @@ export default function ChatMessage({ message, recipient }: ChatMessageProps) {
         )}
       </div>
 
-      {/* Reaction menu (visible only when this message is active) */}
+      {/* Reaction menu */}
       {isActive && (
         <div
           className={cn(

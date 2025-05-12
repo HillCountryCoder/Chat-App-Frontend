@@ -16,6 +16,16 @@ export interface Message {
   createdAt: string;
   isEdited: boolean;
   reactions: Reaction[];
+  replyToId?: string;
+  replyTo?: {
+    _id: string;
+    content: string;
+    senderId: {
+      _id: string;
+      displayName: string;
+      username: string;
+    };
+  };
   sender?: {
     _id: string;
     username: string;

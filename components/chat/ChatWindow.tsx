@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ChatMessage from "./ChatMessage";
 import MessageDate from "./MessageDate";
-import { Phone, Video, Paperclip, Send, Loader2 } from "lucide-react";
+import { Phone, Video, Paperclip, Send, Loader2, Reply, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "../ui/skeleton";
 import { useMarkAsRead } from "@/hooks/use-unread";
@@ -29,6 +29,7 @@ export default function ChatWindow({
   const { socket } = useSocket();
   const queryClient = useQueryClient();
   const { markDirectMessageAsRead } = useMarkAsRead();
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
 
   const {
     data: messages = [],
@@ -133,10 +134,12 @@ export default function ChatWindow({
       {
         content: newMessage,
         directMessageId,
+        replyToId: replyingTo?._id,
       },
       {
         onSuccess: () => {
           setNewMessage("");
+          setReplyingTo(null);
         },
         onError: (error) => {
           console.error("Failed to send message:", error);
@@ -145,6 +148,13 @@ export default function ChatWindow({
     );
   };
 
+  const handleReply = (message: Message) => {
+    setReplyingTo(message);
+  };
+
+  const cancelReply = () => {
+    setReplyingTo(null);
+  };
   // Check if two dates are the same day (without date-fns)
   const areSameDay = (date1: string, date2: string) => {
     const d1 = new Date(date1);
@@ -281,6 +291,7 @@ export default function ChatWindow({
                   <ChatMessage
                     message={messageWithReactions}
                     recipient={recipient}
+                    onReply={handleReply}
                   />
                 </Fragment>
               );
@@ -292,6 +303,30 @@ export default function ChatWindow({
 
       {/* Input */}
       <div className="p-4 border-t border-border">
+        {replyingTo && (
+          <div className="p-2 bg-muted/30 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <Reply className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Replying to</span>
+              <span className="font-medium">
+                {typeof replyingTo.senderId === "object"
+                  ? replyingTo.senderId.displayName
+                  : replyingTo.sender?.displayName || "Unknown"}
+              </span>
+              <span className="text-muted-foreground truncate max-w-[200px]">
+                {replyingTo.content}
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={cancelReply}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
         <div className="flex gap-2">
           <Button type="button" size="icon" variant="ghost" onClick={() => {}}>
             <Paperclip size={18} />

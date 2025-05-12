@@ -36,6 +36,7 @@ export function useSendMessage() {
       channelId?: string;
       directMessageId?: string;
       receiverId?: string;
+	  replyToId?: string;
     }) => {
       // If socket is connected, emit message through socket
       if (socket?.connected) {
