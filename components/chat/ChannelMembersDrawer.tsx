@@ -11,9 +11,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  useChannelMembers,
   useAddChannelMember,
   useRemoveChannelMember,
+  useChannelMembers,
 } from "@/hooks/use-channels";
 import { useUsers } from "@/hooks/use-chat";
 import { useAuthStore } from "@/store/auth-store";
@@ -63,6 +63,7 @@ export default function ChannelMembersDrawer({
 
   const { user: currentUser } = useAuthStore();
 
+  // Use the new hook to get members with user data populated
   const { data: members = [], isLoading: isLoadingMembers } =
     useChannelMembers(channelId);
 
@@ -89,12 +90,14 @@ export default function ChannelMembersDrawer({
     (member) => member.userId === currentUser?._id,
   );
 
-  const isAdmin = currentUserMembership?.permissions.includes("admin");
+  const isAdmin =
+    currentUserMembership?.permissions?.includes("admin") ||
+    currentUserMembership?.roles?.includes("admin");
 
   // Filter out users that are already members
-  const nonMemberUsers = users.filter(
-    (user: User) => !members.some((member) => member.userId === user._id),
-  );
+  const nonMemberUsers = users.filter((user: User) => {
+    return !members.some((member) => member.userId === user._id);
+  });
 
   const handleAddMember = async (userId: string) => {
     try {
@@ -116,8 +119,10 @@ export default function ChannelMembersDrawer({
 
   // Sort members to put admins first
   const sortedMembers = [...filteredMembers].sort((a, b) => {
-    const aIsAdmin = a.permissions.includes("admin");
-    const bIsAdmin = b.permissions.includes("admin");
+    const aIsAdmin =
+      a.permissions?.includes("admin") || a.roles?.includes("admin");
+    const bIsAdmin =
+      b.permissions?.includes("admin") || b.roles?.includes("admin");
 
     if (aIsAdmin && !bIsAdmin) return -1;
     if (!aIsAdmin && bIsAdmin) return 1;
@@ -160,56 +165,65 @@ export default function ChannelMembersDrawer({
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : sortedMembers.length > 0 ? (
-                sortedMembers.map((member) => (
-                  <div
-                    key={member._id}
-                    className="flex items-center justify-between p-2 rounded-md hover:bg-accent"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarImage
-                          src={member.user?.avatarUrl || ""}
-                          alt={member.user?.displayName || ""}
-                        />
-                        <AvatarFallback>
-                          {member.user?.displayName?.charAt(0) || "?"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">
-                            {member.user?.displayName}
-                          </span>
-                          {member.permissions.includes("admin") && (
-                            <ShieldAlert className="h-3.5 w-3.5 text-primary" />
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          @{member.user?.username}
-                        </p>
-                      </div>
-                    </div>
+                sortedMembers.map((member) => {
+                  const user = member.user;
+                  const displayName = user?.displayName || "Unknown User";
+                  const username = user?.username || "unknown";
+                  const avatarUrl = user?.avatarUrl;
+                  const isAdminMember =
+                    member.permissions?.includes("admin") ||
+                    member.roles?.includes("admin");
+                  const isCurrentUser = member.userId === currentUser?._id;
 
-                    {isAdmin && member.userId !== currentUser?._id && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => handleRemoveMember(member.userId)}
-                          >
-                            <UserMinus className="h-4 w-4 mr-2" />
-                            Remove from channel
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                  </div>
-                ))
+                  return (
+                    <div
+                      key={member._id}
+                      className="flex items-center justify-between p-2 rounded-md hover:bg-accent"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Avatar>
+                          <AvatarImage
+                            src={avatarUrl || ""}
+                            alt={displayName}
+                          />
+                          <AvatarFallback>
+                            {displayName.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{displayName}</span>
+                            {isAdminMember && (
+                              <ShieldAlert className="h-3.5 w-3.5 text-primary" />
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            @{username}
+                          </p>
+                        </div>
+                      </div>
+
+                      {isAdmin && !isCurrentUser && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => handleRemoveMember(member.userId)}
+                            >
+                              <UserMinus className="h-4 w-4 mr-2" />
+                              Remove from channel
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                  );
+                })
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   No members found
