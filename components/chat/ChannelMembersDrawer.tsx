@@ -43,6 +43,7 @@ import {
   UserPlus,
   Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 
 interface ChannelMembersDrawerProps {
   isOpen: boolean;
@@ -58,8 +59,10 @@ export default function ChannelMembersDrawer({
   channel,
 }: ChannelMembersDrawerProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
 
   const { user: currentUser } = useAuthStore();
 
@@ -67,7 +70,8 @@ export default function ChannelMembersDrawer({
   const { data: members = [], isLoading: isLoadingMembers } =
     useChannelMembers(channelId);
 
-  const { data: users = [], isLoading: isLoadingUsers } = useUsers(searchQuery);
+  const { data: users = [], isLoading: isLoadingUsers } =
+    useUsers(memberSearchQuery);
 
   const addMember = useAddChannelMember();
   const removeMember = useRemoveChannelMember();
@@ -102,18 +106,26 @@ export default function ChannelMembersDrawer({
   const handleAddMember = async (userId: string) => {
     try {
       await addMember.mutateAsync({ channelId, userId });
+      toast.success("Member added successfully");
       setIsAddingMember(false);
       setSelectedUser(null);
+      setMemberSearchQuery("");
     } catch (error) {
       console.error("Failed to add member:", error);
+      toast.error("Failed to add member");
     }
   };
 
   const handleRemoveMember = async (userId: string) => {
+    setRemovingUserId(userId);
     try {
       await removeMember.mutateAsync({ channelId, userId });
+      toast.success("Member removed successfully");
     } catch (error) {
       console.error("Failed to remove member:", error);
+      toast.error("Failed to remove member");
+    } finally {
+      setRemovingUserId(null);
     }
   };
 
@@ -174,11 +186,14 @@ export default function ChannelMembersDrawer({
                     member.permissions?.includes("admin") ||
                     member.roles?.includes("admin");
                   const isCurrentUser = member.userId === currentUser?._id;
+                  const isRemoving = removingUserId === member.userId;
 
                   return (
                     <div
                       key={member._id}
-                      className="flex items-center justify-between p-2 rounded-md hover:bg-accent"
+                      className={`flex items-center justify-between p-2 rounded-md hover:bg-accent ${
+                        isRemoving ? "opacity-50" : ""
+                      }`}
                     >
                       <div className="flex items-center gap-3">
                         <Avatar>
@@ -206,14 +221,23 @@ export default function ChannelMembersDrawer({
                       {isAdmin && !isCurrentUser && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreVertical className="h-4 w-4" />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              disabled={isRemoving}
+                            >
+                              {isRemoving ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <MoreVertical className="h-4 w-4" />
+                              )}
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
                               onClick={() => handleRemoveMember(member.userId)}
+                              disabled={isRemoving}
                             >
                               <UserMinus className="h-4 w-4 mr-2" />
                               Remove from channel
@@ -235,7 +259,16 @@ export default function ChannelMembersDrawer({
       </Sheet>
 
       {/* Add Member Dialog */}
-      <Dialog open={isAddingMember} onOpenChange={setIsAddingMember}>
+      <Dialog
+        open={isAddingMember}
+        onOpenChange={(open) => {
+          setIsAddingMember(open);
+          if (!open) {
+            setMemberSearchQuery("");
+            setSelectedUser(null);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Members</DialogTitle>
@@ -250,8 +283,8 @@ export default function ChannelMembersDrawer({
               <Input
                 className="pl-8"
                 placeholder="Search users"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={memberSearchQuery}
+                onChange={(e) => setMemberSearchQuery(e.target.value)}
               />
             </div>
 
@@ -290,7 +323,9 @@ export default function ChannelMembersDrawer({
                 ))
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
-                  No users found
+                  {memberSearchQuery
+                    ? "No users found"
+                    : "Start typing to search users"}
                 </div>
               )}
             </div>
