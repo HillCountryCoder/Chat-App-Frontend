@@ -54,7 +54,7 @@ export function useSendChannelMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (message: { content: string; channelId: string }) => {
+    mutationFn: async (message: { content: string; channelId: string, replyToId?: string }) => {
       // If socket is connected, emit message through socket
       if (socket?.connected) {
         return new Promise((resolve, reject) => {

@@ -8,7 +8,7 @@ const authRoutes = [
   "/forgot-password",
   "/reset-password",
 ];
-const protectedRoutes = ["/", "/chat"];
+const protectedRoutes = ["/chat"];
 
 const isTokenExpired = (token: string): boolean => {
   try {
@@ -29,18 +29,6 @@ const isTokenExpired = (token: string): boolean => {
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  // Don't process auth routes for token checks
-  if (authRoutes.includes(pathname)) {
-    // If on auth routes, clear any expired tokens but don't redirect
-    const token = request.cookies.get("token")?.value;
-    if (token && isTokenExpired(token)) {
-      const response = NextResponse.next();
-      response.cookies.delete("token");
-      return response;
-    }
-    return NextResponse.next();
-  }
 
   // Try to get token from cookie
   const token = request.cookies.get("token")?.value;
@@ -66,17 +54,23 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // If not authenticated and trying to access protected route
-  if (
-    !isAuthenticated &&
-    protectedRoutes.some((route) => pathname.startsWith(route))
-  ) {
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
-
-  // If authenticated and trying to access auth routes
+  // If authenticated and trying to access auth routes (login, register, etc.)
   if (isAuthenticated && authRoutes.includes(pathname)) {
     return NextResponse.redirect(new URL("/chat", request.url));
+  }
+
+  // If authenticated and at root, redirect to /chat
+  if (isAuthenticated && pathname === "/") {
+    return NextResponse.redirect(new URL("/chat", request.url));
+  }
+
+  // If not authenticated and trying to access protected routes
+  if (
+    !isAuthenticated &&
+    (protectedRoutes.some((route) => pathname.startsWith(route)) ||
+      pathname === "/")
+  ) {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   return NextResponse.next();

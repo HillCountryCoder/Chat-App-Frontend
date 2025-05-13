@@ -23,6 +23,8 @@ import {
   Phone,
   Video,
   InfoIcon,
+  Reply,
+  X,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "../ui/skeleton";
@@ -46,6 +48,7 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
   const [messageReactions, setMessageReactions] = useState<
     Record<string, Reaction[]>
   >({});
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   // Update refs when their values change
   useEffect(() => {
     queryClientRef.current = queryClient;
@@ -188,9 +191,11 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
       await sendMessageMutation.mutateAsync({
         content: newMessage,
         channelId,
+        replyToId: replyingTo?._id,
       });
 
       setNewMessage("");
+	  setReplyingTo(null);
     } catch (error) {
       console.error("Failed to send message:", error);
     }
@@ -198,6 +203,14 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
 
   const toggleMembersDrawer = () => {
     setShowMembers(!showMembers);
+  };
+
+  const handleReply = (message: Message) => {
+    setReplyingTo(message);
+  };
+
+  const cancelReply = () => {
+    setReplyingTo(null);
   };
 
   const isLoading = channelLoading || messagesLoading;
@@ -299,7 +312,10 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
                   {showDateSeparator && (
                     <MessageDate date={message.createdAt} />
                   )}
-                  <ChatMessage message={messageWithReactions} />
+                  <ChatMessage
+                    message={messageWithReactions}
+                    onReply={handleReply}
+                  />
                 </Fragment>
               );
             })}
@@ -310,6 +326,39 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
 
       {/* Input */}
       <div className="p-4 border-t border-border">
+        {replyingTo && (
+          <div className="px-4 py-2 bg-muted/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-start gap-2 max-w-[90%]">
+                <div className="w-1 bg-primary/50 rounded-full h-12 shrink-0" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <Reply className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">
+                      Replying to
+                    </span>
+                    <span className="text-xs font-medium text-primary">
+                      {typeof replyingTo.senderId === "object"
+                        ? replyingTo.senderId.displayName
+                        : replyingTo.sender?.displayName || "Unknown"}
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground line-clamp-2">
+                    {replyingTo.content}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                onClick={cancelReply}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
         <form onSubmit={handleSendMessage} className="flex gap-2">
           <Button type="button" size="icon" variant="ghost">
             <PaperclipIcon size={18} />
