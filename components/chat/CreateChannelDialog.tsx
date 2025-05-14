@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -37,6 +37,7 @@ import {
 import { MultiSelect } from "@/components/ui/multi-select";
 import { User } from "@/types/user";
 import { Loader2 } from "lucide-react";
+import { debounce } from "lodash";
 
 // Validation schema
 const createChannelSchema = z.object({
@@ -67,7 +68,7 @@ export default function CreateChannelDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
 
-  const { data: users = [], isLoading: loadingUsers } = useUsers(searchQuery);
+  const { data: users = [] } = useUsers(searchQuery);
   const createChannel = useCreateChannel();
 
   const form = useForm<CreateChannelFormData>({
@@ -79,6 +80,12 @@ export default function CreateChannelDialog({
       memberIds: [],
     },
   });
+  const handleSearch = useCallback(
+    debounce((value: string) => {
+      setSearchQuery(value);
+    }, 300),
+    [],
+  );
 
   const onSubmit = async (data: CreateChannelFormData) => {
     try {
@@ -96,14 +103,15 @@ export default function CreateChannelDialog({
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       form.reset();
+      setSearchQuery("");
       onClose();
     }
   };
 
+  // Convert users to the format expected by the new MultiSelect
   const userOptions = users.map((user: User) => ({
     label: user.displayName,
     value: user._id,
-    avatar: user.avatarUrl,
   }));
 
   return (
@@ -189,11 +197,10 @@ export default function CreateChannelDialog({
                     <FormControl>
                       <MultiSelect
                         options={userOptions}
-                        selected={field.value}
-                        onChange={field.onChange}
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
                         placeholder="Search users..."
-                        isLoading={loadingUsers}
-                        onSearch={(value) => setSearchQuery(value)}
+                        onSearch={handleSearch}
                       />
                     </FormControl>
                     <FormMessage />
