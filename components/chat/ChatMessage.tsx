@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Message, Reaction } from "@/types/chat";
+import { Attachment } from "@/types/attachment";
 import { useAuthStore } from "@/store/auth-store";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -9,6 +10,7 @@ import { api } from "@/lib/api";
 import { User } from "@/types/user";
 import MessageReactions from "./MessageReactions";
 import MessageReactionMenu from "./MessageReactionMenu";
+import AttachmentDisplay from "./AttachmentDisplay";
 import { useSocket } from "@/providers/socket-provider";
 import { Button } from "../ui/button";
 import { useReaction } from "@/hooks/use-reaction";
@@ -17,6 +19,7 @@ interface ChatMessageProps {
   message: Message;
   recipient?: User;
   onReply?: (message: Message) => void;
+  onPreviewAttachment?: (attachment: Attachment) => void;
 }
 
 interface ReactionResponse {
@@ -28,6 +31,7 @@ export default function ChatMessage({
   message,
   recipient,
   onReply,
+  onPreviewAttachment,
 }: ChatMessageProps) {
   const { user: currentUser } = useAuthStore();
   const { socket } = useSocket();
@@ -137,6 +141,10 @@ export default function ChatMessage({
 
   const shouldShowTrigger = !isMenuOpen || isActive;
 
+  // Check if message has content or attachments
+  const hasTextContent = message.content && message.content.trim() !== "📎";
+  const hasAttachments = message.attachments && message.attachments.length > 0;
+
   return (
     <div
       className={cn(
@@ -201,16 +209,34 @@ export default function ChatMessage({
             isOwnMessage ? "flex-row-reverse" : ""
           } items-start gap-2`}
         >
-          <div
-            className={cn(
-              "px-4 py-2 rounded-2xl transition-colors",
-              isOwnMessage
-                ? "bg-chat-message-bg text-chat-message-fg rounded-br-none"
-                : "bg-muted text-foreground rounded-bl-none",
-              isActive && "shadow-[inset_0_0_0_1000px_rgba(0,0,0,0.2)]",
+          <div className="space-y-2">
+            {/* Text message bubble */}
+            {hasTextContent && (
+              <div
+                className={cn(
+                  "px-4 py-2 rounded-2xl transition-colors",
+                  isOwnMessage
+                    ? "bg-chat-message-bg text-chat-message-fg rounded-br-none"
+                    : "bg-muted text-foreground rounded-bl-none",
+                  isActive && "shadow-[inset_0_0_0_1000px_rgba(0,0,0,0.2)]",
+                )}
+              >
+                <p>{message.content}</p>
+              </div>
             )}
-          >
-            <p>{message.content}</p>
+
+            {/* Attachments */}
+            {hasAttachments && (
+              <div
+                className={cn("max-w-md", isOwnMessage && "flex justify-end")}
+              >
+                <AttachmentDisplay
+                  attachments={message.attachments}
+                  isInMessage={true}
+                  onPreview={onPreviewAttachment}
+                />
+              </div>
+            )}
           </div>
 
           {/* Message Actions */}

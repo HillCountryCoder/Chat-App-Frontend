@@ -7,10 +7,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ChatMessage from "./ChatMessage";
 import MessageDate from "./MessageDate";
-import { Phone, Video, Paperclip, Send, Loader2, Reply, X } from "lucide-react";
+import FileUploadDropzone from "./FileUploadDropzone";
+import AttachmentPreview from "./AttachmentPreview";
+import MediaViewer from "./MediaViewer";
+import {
+  Phone,
+  Video,
+  Paperclip,
+  Send,
+  Loader2,
+  Reply,
+  X,
+  Upload,
+} from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "../ui/skeleton";
 import { useMarkAsRead } from "@/hooks/use-unread";
+import { useFileUpload } from "@/hooks/use-file-upload";
+import { useAttachmentPreview } from "@/hooks/use-attachments";
+import { Attachment } from "@/types/attachment";
+import { cn } from "@/lib/utils";
 
 interface ChatWindowProps {
   directMessageId: string;
@@ -25,6 +41,7 @@ export default function ChatWindow({
   const [messageReactions, setMessageReactions] = useState<
     Record<string, Reaction[]>
   >({});
+  const [showFileUpload, setShowFileUpload] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { socket } = useSocket();
   const queryClient = useQueryClient();
@@ -41,6 +58,41 @@ export default function ChatWindow({
     useRecipient(recipientId);
 
   const sendMessageMutation = useSendMessage();
+
+  // File upload hook
+  const {
+    pendingFiles,
+    uploadedAttachments,
+    isUploading,
+    addFiles,
+    removeFile,
+    removeAttachment,
+    clearAll,
+    retryFailedUploads,
+    getAttachmentIds,
+    isReadyToSend,
+    hasFailedUploads,
+    hasCompletedUploads,
+    getTotalCount,
+    canAddMoreFiles,
+  } = useFileUpload({
+    autoUpload: true,
+    onSuccess: (attachments) => {
+      console.log("Files uploaded successfully:", attachments);
+    },
+    onError: (error) => {
+      console.error("Upload error:", error);
+    },
+  });
+
+  // Media viewer hook
+  const {
+    currentAttachment,
+    isOpen: isViewerOpen,
+    openPreview,
+    closePreview,
+  } = useAttachmentPreview();
+
   useEffect(() => {
     if (!socket || !directMessageId) return;
 
@@ -52,6 +104,7 @@ export default function ChatWindow({
       socket.emit("leave_direct_message", { directMessageId });
     };
   }, [socket, directMessageId]);
+
   // Mark messages as read when entering the chat
   useEffect(() => {
     if (directMessageId) {
@@ -95,7 +148,7 @@ export default function ChatWindow({
     }
   }, [socket, directMessageId, queryClient, markDirectMessageAsRead]);
 
-  // In ChatWindow.tsx, update the message reactions effect
+  // Listen for reaction updates
   useEffect(() => {
     if (!socket) return;
 
@@ -108,7 +161,7 @@ export default function ChatWindow({
       // Update local state
       setMessageReactions((prev) => {
         const newState = { ...prev };
-        newState[data.messageId] = [...data.reactions]; // Make sure to create a new array
+        newState[data.messageId] = [...data.reactions];
         return newState;
       });
     };
@@ -118,7 +171,7 @@ export default function ChatWindow({
     return () => {
       socket.off("message_reaction_updated", handleReactionUpdate);
     };
-  }, [socket]); // Only depend on socket
+  }, [socket]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -128,24 +181,34 @@ export default function ChatWindow({
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() && getAttachmentIds().length === 0) return;
+
+    // Ensure all files are uploaded before sending
+    if (!isReadyToSend) return;
 
     sendMessageMutation.mutate(
       {
-        content: newMessage,
+        content: newMessage.trim() || "📎", // Use emoji if only attachments
         directMessageId,
         replyToId: replyingTo?._id,
+        attachmentIds: getAttachmentIds(),
       },
       {
         onSuccess: () => {
           setNewMessage("");
           setReplyingTo(null);
+          clearAll(); // Clear uploaded files after successful send
         },
         onError: (error) => {
           console.error("Failed to send message:", error);
         },
       },
     );
+  };
+
+  const handleFileUpload = (files: File[]) => {
+    addFiles(files);
+    setShowFileUpload(false);
   };
 
   const handleReply = (message: Message) => {
@@ -155,7 +218,12 @@ export default function ChatWindow({
   const cancelReply = () => {
     setReplyingTo(null);
   };
-  // Check if two dates are the same day (without date-fns)
+
+  const handlePreviewAttachment = (attachment: Attachment) => {
+    openPreview(attachment);
+  };
+
+  // Check if two dates are the same day
   const areSameDay = (date1: string, date2: string) => {
     const d1 = new Date(date1);
     const d2 = new Date(date2);
@@ -189,6 +257,10 @@ export default function ChatWindow({
   };
 
   const isLoading = messagesLoading || recipientLoading;
+  const canSendMessage =
+    (newMessage.trim() || hasCompletedUploads) &&
+    isReadyToSend() &&
+    !sendMessageMutation.isPending;
 
   return (
     <div className="flex flex-col h-full">
@@ -292,6 +364,7 @@ export default function ChatWindow({
                     message={messageWithReactions}
                     recipient={recipient}
                     onReply={handleReply}
+                    onPreviewAttachment={handlePreviewAttachment}
                   />
                 </Fragment>
               );
@@ -301,8 +374,45 @@ export default function ChatWindow({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="p-4 border-t border-border">
+      {/* File Upload Dropzone (shown when drag over) */}
+      {showFileUpload && (
+        <div className="absolute inset-0 z-50 bg-black/50 flex items-center justify-center p-8">
+          <div className="bg-background rounded-lg p-6 max-w-md w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-medium">Upload Files</h3>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowFileUpload(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <FileUploadDropzone
+              onFilesSelected={handleFileUpload}
+              currentFileCount={getTotalCount()}
+              disabled={!canAddMoreFiles}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Input Section */}
+      <div className="border-t border-border">
+        {/* Attachment Preview */}
+        {(pendingFiles.length > 0 || uploadedAttachments.length > 0) && (
+          <div className="p-4 border-b border-border">
+            <AttachmentPreview
+              pendingFiles={pendingFiles}
+              uploadedAttachments={uploadedAttachments}
+              onRemoveFile={removeFile}
+              onRemoveAttachment={removeAttachment}
+              onRetryFailed={hasFailedUploads ? retryFailedUploads : undefined}
+            />
+          </div>
+        )}
+
+        {/* Reply Preview */}
         {replyingTo && (
           <div className="px-4 py-2 bg-muted/30">
             <div className="flex items-center justify-between">
@@ -336,35 +446,56 @@ export default function ChatWindow({
             </div>
           </div>
         )}
-        <div className="flex gap-2">
-          <Button type="button" size="icon" variant="ghost" onClick={() => {}}>
-            <Paperclip size={18} />
-          </Button>
-          <Input
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
-            className="flex-1"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage(e);
-              }
-            }}
-          />
-          <Button
-            onClick={handleSendMessage}
-            size="icon"
-            disabled={!newMessage.trim() || sendMessageMutation.isPending}
-          >
-            {sendMessageMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send size={18} />
-            )}
-          </Button>
+
+        {/* Message Input */}
+        <div className="p-4">
+          <form onSubmit={handleSendMessage} className="flex gap-2">
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={() => setShowFileUpload(true)}
+              disabled={!canAddMoreFiles}
+              title={canAddMoreFiles ? "Attach files" : "Maximum files reached"}
+            >
+              <Paperclip size={18} />
+            </Button>
+            <Input
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              placeholder="Type a message..."
+              className="flex-1"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage(e);
+                }
+              }}
+            />
+            <Button
+              type="submit"
+              size="icon"
+              disabled={!canSendMessage}
+              className={cn(isUploading && "animate-pulse")}
+            >
+              {sendMessageMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : isUploading ? (
+                <Upload className="h-4 w-4" />
+              ) : (
+                <Send size={18} />
+              )}
+            </Button>
+          </form>
         </div>
       </div>
+
+      {/* Media Viewer */}
+      <MediaViewer
+        attachment={currentAttachment}
+        isOpen={isViewerOpen}
+        onClose={closePreview}
+      />
     </div>
   );
 }

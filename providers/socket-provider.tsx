@@ -104,9 +104,31 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Attachment status update handlers
+    function onAttachmentStatusUpdate(data: {
+      attachmentId: string;
+      status: string;
+      metadata?: any;
+      error?: string;
+    }) {
+      console.log("Attachment status update:", data);
+      // This will be handled by individual components using useAttachmentStatusUpdates
+    }
+
+    function onAttachmentProcessingComplete(data: {
+      attachmentId: string;
+      status: string;
+      fileName: string;
+    }) {
+      console.log("Attachment processing complete:", data);
+      // This will be handled by individual components using useAttachmentStatusUpdates
+    }
+
     socketInstance.on("connect", onConnect);
     socketInstance.on("disconnect", onDisconnect);
     socketInstance.on("connect_error", onConnectError);
+    socketInstance.on("attachment_status_update", onAttachmentStatusUpdate);
+    socketInstance.on("attachment_processing_complete", onAttachmentProcessingComplete);
 
     setIsConnected(socketInstance.connected);
 
@@ -114,6 +136,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       socketInstance.off("connect", onConnect);
       socketInstance.off("disconnect", onDisconnect);
       socketInstance.off("connect_error", onConnectError);
+      socketInstance.off("attachment_status_update", onAttachmentStatusUpdate);
+      socketInstance.off("attachment_processing_complete", onAttachmentProcessingComplete);
     };
   }, [isAuthenticated, token, actions, router]);
 

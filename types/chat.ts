@@ -1,4 +1,5 @@
 // types/chat.ts
+import { Attachment } from "./attachment";
 import { User } from "./user";
 export interface Reaction {
   emoji: string;
@@ -32,6 +33,9 @@ export interface Message {
     displayName: string;
     avatarUrl?: string;
   };
+  attachments: Attachment[];
+  hasMedia: boolean;
+  totalAttachmentSize?: number;
 }
 
 export enum ChannelType {

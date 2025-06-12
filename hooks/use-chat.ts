@@ -36,7 +36,8 @@ export function useSendMessage() {
       channelId?: string;
       directMessageId?: string;
       receiverId?: string;
-	  replyToId?: string;
+      replyToId?: string;
+      attachmentIds?: string[];
     }) => {
       // If socket is connected, emit message through socket
       if (socket?.connected) {
@@ -112,6 +113,7 @@ export function useDirectMessage(id?: string) {
     enabled: isAuthenticated && !!id,
   });
 }
+
 export function useRecipient(userId?: string) {
   return useQuery({
     queryKey: ["user", userId],
@@ -122,6 +124,7 @@ export function useRecipient(userId?: string) {
     enabled: !!userId,
   });
 }
+
 export function useUsers(searchQuery: string = "") {
   return useQuery({
     queryKey: ["users", searchQuery],

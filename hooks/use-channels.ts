@@ -58,6 +58,7 @@ export function useSendChannelMessage() {
       content: string;
       channelId: string;
       replyToId?: string;
+      attachmentIds?: string[];
     }) => {
       // If socket is connected, emit message through socket
       if (socket?.connected) {
@@ -76,6 +77,8 @@ export function useSendChannelMessage() {
           `/channels/${message.channelId}/messages`,
           {
             content: message.content,
+	    replyToId: message.replyToId,
+	    attachmentIds: message.attachmentIds,
           },
         );
         return data;

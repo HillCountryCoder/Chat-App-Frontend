@@ -32,13 +32,15 @@ export function NavUser() {
   return (
     <div className="relative">
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+        <DropdownMenuTrigger asChild className="cursor-pointer">
           <button className="relative outline-none focus:ring-2 focus:ring-primary/50 rounded-full">
             <Avatar>
-              <AvatarImage
-                src={user?.avatarUrl || ""}
-                alt={user?.displayName || ""}
-              />
+              {user?.avatarUrl && (
+                <AvatarImage
+                  src={user.avatarUrl}
+                  alt={user?.displayName || ""}
+                />
+              )}
               <AvatarFallback>
                 {user?.displayName?.charAt(0) ||
                   user?.username?.charAt(0) ||
