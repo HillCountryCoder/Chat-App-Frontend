@@ -5,19 +5,19 @@ import { Attachment } from "@/types/attachment";
 import { AttachmentService } from "@/lib/attachment.service";
 import { FileUploadService } from "@/lib/file-upload.service";
 import { Button } from "@/components/ui/button";
-import { 
-  X, 
-  Download, 
-  ZoomIn, 
-  ZoomOut, 
+import {
+  X,
+  Download,
+  ZoomIn,
+  ZoomOut,
   RotateCw,
   ChevronLeft,
   ChevronRight,
   Loader2,
-  ExternalLink
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 interface MediaViewerProps {
   attachment: Attachment | null;
@@ -55,34 +55,34 @@ export default function MediaViewer({
       if (!isOpen) return;
 
       switch (e.key) {
-        case 'Escape':
+        case "Escape":
           onClose();
           break;
-        case 'ArrowLeft':
+        case "ArrowLeft":
           onPrevious?.();
           break;
-        case 'ArrowRight':
+        case "ArrowRight":
           onNext?.();
           break;
-        case '+':
-        case '=':
-          setZoom(prev => Math.min(prev + 0.25, 3));
+        case "+":
+        case "=":
+          setZoom((prev) => Math.min(prev + 0.25, 3));
           break;
-        case '-':
-          setZoom(prev => Math.max(prev - 0.25, 0.25));
+        case "-":
+          setZoom((prev) => Math.max(prev - 0.25, 0.25));
           break;
-        case '0':
+        case "0":
           setZoom(1);
           setRotation(0);
           break;
-        case 'r':
-          setRotation(prev => (prev + 90) % 360);
+        case "r":
+          setRotation((prev) => (prev + 90) % 360);
           break;
       }
     };
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
   }, [isOpen, onClose, onNext, onPrevious]);
 
   const handleDownload = async () => {
@@ -100,22 +100,24 @@ export default function MediaViewer({
 
   const handleOpenOriginal = () => {
     if (attachment?.url) {
-      window.open(attachment.url, '_blank');
+      window.open(attachment.url, "_blank");
     }
   };
 
   if (!attachment) return null;
 
-  const isImage = attachment.type.startsWith('image/');
-  const isVideo = attachment.type.startsWith('video/');
-  const isPdf = attachment.type === 'application/pdf';
-  const isText = attachment.type.startsWith('text/');
+  const isImage = attachment.type.startsWith("image/");
+  const isVideo = attachment.type.startsWith("video/");
+  const isPdf = attachment.type === "application/pdf";
+  const isText = attachment.type.startsWith("text/");
 
-  const currentIndex = attachments.findIndex(a => a._id === attachment._id);
+  const currentIndex = attachments.findIndex((a) => a._id === attachment._id);
   const hasMultiple = attachments.length > 1;
+  console.log("Current index:", currentIndex, "Has multiple:", attachments);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogTitle>{attachment.name}</DialogTitle>
       <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-0">
         <div className="relative w-full h-[95vh] flex flex-col">
           {/* Header */}
@@ -140,7 +142,9 @@ export default function MediaViewer({
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => setZoom(prev => Math.max(prev - 0.25, 0.25))}
+                      onClick={() =>
+                        setZoom((prev) => Math.max(prev - 0.25, 0.25))
+                      }
                       className="text-white hover:bg-white/20"
                     >
                       <ZoomOut className="h-4 w-4" />
@@ -148,7 +152,9 @@ export default function MediaViewer({
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => setZoom(prev => Math.min(prev + 0.25, 3))}
+                      onClick={() =>
+                        setZoom((prev) => Math.min(prev + 0.25, 3))
+                      }
                       className="text-white hover:bg-white/20"
                     >
                       <ZoomIn className="h-4 w-4" />
@@ -156,7 +162,7 @@ export default function MediaViewer({
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => setRotation(prev => (prev + 90) % 360)}
+                      onClick={() => setRotation((prev) => (prev + 90) % 360)}
                       className="text-white hover:bg-white/20"
                     >
                       <RotateCw className="h-4 w-4" />
@@ -212,7 +218,7 @@ export default function MediaViewer({
                   <ChevronLeft className="h-6 w-6" />
                 </Button>
               )}
-              
+
               {onNext && currentIndex < attachments.length - 1 && (
                 <Button
                   size="lg"
@@ -227,7 +233,7 @@ export default function MediaViewer({
           )}
 
           {/* Content */}
-          <div 
+          <div
             ref={containerRef}
             className="flex-1 flex items-center justify-center p-4 pt-20 overflow-hidden"
             onClick={(e) => e.target === e.currentTarget && onClose()}
@@ -244,7 +250,7 @@ export default function MediaViewer({
                 alt={attachment.name}
                 className={cn(
                   "max-w-full max-h-full object-contain transition-all duration-200",
-                  isLoading && "opacity-0"
+                  isLoading && "opacity-0",
                 )}
                 style={{
                   transform: `scale(${zoom}) rotate(${rotation}deg)`,
@@ -260,7 +266,7 @@ export default function MediaViewer({
                 controls
                 className={cn(
                   "max-w-full max-h-full",
-                  isLoading && "opacity-0"
+                  isLoading && "opacity-0",
                 )}
                 onLoadedData={() => setIsLoading(false)}
                 onError={() => setIsLoading(false)}
@@ -273,7 +279,7 @@ export default function MediaViewer({
                 src={attachment.url}
                 className={cn(
                   "w-full h-full border-0",
-                  isLoading && "opacity-0"
+                  isLoading && "opacity-0",
                 )}
                 onLoad={() => setIsLoading(false)}
                 title={attachment.name}
@@ -282,7 +288,10 @@ export default function MediaViewer({
 
             {isText && (
               <div className="max-w-4xl max-h-full bg-white rounded-lg p-6 overflow-auto">
-                <TextFileViewer attachment={attachment} onLoad={() => setIsLoading(false)} />
+                <TextFileViewer
+                  attachment={attachment}
+                  onLoad={() => setIsLoading(false)}
+                />
               </div>
             )}
 
@@ -312,9 +321,7 @@ export default function MediaViewer({
 
           {/* Keyboard shortcuts hint */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-center text-white/50 text-xs">
-            <p>
-              ESC: Close • ←→: Navigate • +/-: Zoom • R: Rotate • 0: Reset
-            </p>
+            <p>ESC: Close • ←→: Navigate • +/-: Zoom • R: Rotate • 0: Reset</p>
           </div>
         </div>
       </DialogContent>
@@ -322,12 +329,12 @@ export default function MediaViewer({
   );
 }
 
-function TextFileViewer({ 
-  attachment, 
-  onLoad 
-}: { 
-  attachment: Attachment; 
-  onLoad: () => void; 
+function TextFileViewer({
+  attachment,
+  onLoad,
+}: {
+  attachment: Attachment;
+  onLoad: () => void;
 }) {
   const [content, setContent] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -337,7 +344,7 @@ function TextFileViewer({
       try {
         const response = await fetch(attachment.url);
         if (!response.ok) throw new Error("Failed to fetch file");
-        
+
         const text = await response.text();
         setContent(text);
         onLoad();
@@ -358,9 +365,5 @@ function TextFileViewer({
     );
   }
 
-  return (
-    <div className="font-mono text-sm whitespace-pre-wrap">
-      {content}
-    </div>
-  );
+  return <div className="font-mono text-sm whitespace-pre-wrap">{content}</div>;
 }

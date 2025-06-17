@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AttachmentService } from "@/lib/attachment.service";
 import { Attachment } from "@/types/attachment";
 import { useSocket } from "@/providers/socket-provider";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 export function useUserAttachments() {
@@ -58,11 +58,30 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
     >
   >({});
 
+  // Memoize the attachment IDs to prevent unnecessary re-subscriptions
+  const memoizedAttachmentIds = useMemo(() => {
+    // Sort to ensure consistent array comparison
+    return [...attachmentIds].sort();
+  }, [attachmentIds]);
+
+  // Create a stable string key for comparison
+  const attachmentIdsKey = memoizedAttachmentIds.join(",");
+
   useEffect(() => {
-    if (!socket || attachmentIds.length === 0) return;
+    if (!socket || memoizedAttachmentIds.length === 0) {
+      console.log("Skipping subscription - no socket or no attachment IDs");
+      return;
+    }
+
+    console.log(
+      "Subscribing to attachment updates for IDs:",
+      memoizedAttachmentIds,
+    );
 
     // Subscribe to attachment updates
-    socket.emit("subscribe_attachment_updates", { attachmentIds });
+    socket.emit("subscribe_attachment_updates", {
+      attachmentIds: memoizedAttachmentIds,
+    });
 
     const handleStatusUpdate = (data: {
       attachmentId: string;
@@ -70,6 +89,7 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
       metadata?: any;
       error?: string;
     }) => {
+      console.log("Received status update in socket:", data);
       setStatusUpdates((prev) => ({
         ...prev,
         [data.attachmentId]: {
@@ -78,7 +98,6 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
           error: data.error,
         },
       }));
-
       // Show toast for completion or failure
       if (data.status === "ready") {
         toast.success("File processed successfully");
@@ -94,6 +113,7 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
       status: Attachment["status"];
       fileName: string;
     }) => {
+      console.log("Processing complete in socket:", data);
       if (data.status === "ready") {
         toast.success(`${data.fileName} is ready`);
       }
@@ -103,13 +123,20 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
     socket.on("attachment_processing_complete", handleProcessingComplete);
 
     return () => {
+      console.log(
+        "Unsubscribing from attachment updates for IDs:",
+        memoizedAttachmentIds,
+      );
+
       socket.off("attachment_status_update", handleStatusUpdate);
       socket.off("attachment_processing_complete", handleProcessingComplete);
 
       // Unsubscribe from updates
-      socket.emit("unsubscribe_attachment_updates", { attachmentIds });
+      socket.emit("unsubscribe_attachment_updates", {
+        attachmentIds: memoizedAttachmentIds,
+      });
     };
-  }, [socket, attachmentIds]);
+  }, [socket, attachmentIdsKey]); // Use the string key instead of the array
 
   return {
     statusUpdates,

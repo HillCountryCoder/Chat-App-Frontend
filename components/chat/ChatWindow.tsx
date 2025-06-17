@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useMessages, useSendMessage, useRecipient } from "@/hooks/use-chat";
 import { useSocket } from "@/providers/socket-provider";
 import { Message, Reaction } from "@/types/chat";
@@ -24,7 +24,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "../ui/skeleton";
 import { useMarkAsRead } from "@/hooks/use-unread";
 import { useFileUpload } from "@/hooks/use-file-upload";
-import { useAttachmentPreview } from "@/hooks/use-attachments";
+import {
+  useAttachmentPreview,
+  useAttachmentStatusUpdates,
+} from "@/hooks/use-attachments";
 import { Attachment } from "@/types/attachment";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +50,9 @@ export default function ChatWindow({
   const queryClient = useQueryClient();
   const { markDirectMessageAsRead } = useMarkAsRead();
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [previewAttachments, setPreviewAttachments] = useState<Attachment[]>(
+    [],
+  );
 
   const {
     data: messages = [],
@@ -75,6 +81,7 @@ export default function ChatWindow({
     hasCompletedUploads,
     getTotalCount,
     canAddMoreFiles,
+    updateAttachmentStatus,
   } = useFileUpload({
     autoUpload: true,
     onSuccess: (attachments) => {
@@ -93,6 +100,36 @@ export default function ChatWindow({
     closePreview,
   } = useAttachmentPreview();
 
+  const currentAttachmentIds = useMemo(() => {
+    return getAttachmentIds();
+  }, [uploadedAttachments]); // Only depend on uploadedAttachments, not the function
+  // Subscribe to attachment status updates with stable IDs
+  const { statusUpdates } = useAttachmentStatusUpdates(currentAttachmentIds);
+
+  // NEW: Sync status updates to useFileUpload
+  useEffect(() => {
+    Object.entries(statusUpdates).forEach(([attachmentId, update]) => {
+      const currentAttachment = uploadedAttachments.find(
+        (a) => a._id === attachmentId,
+      );
+
+      // Only update if the status has actually changed
+      if (currentAttachment && currentAttachment.status !== update.status) {
+        console.log(
+          `Updating attachment ${attachmentId} status from ${currentAttachment.status} to ${update.status}`,
+        );
+        updateAttachmentStatus(attachmentId, update.status, update.metadata);
+      }
+    });
+  }, [statusUpdates, uploadedAttachments, updateAttachmentStatus]);
+
+  // Log status updates for debugging
+  useEffect(() => {
+    if (Object.keys(statusUpdates).length > 0) {
+      console.log("Attachment status updates:", statusUpdates);
+    }
+  }, [statusUpdates]);
+
   useEffect(() => {
     if (!socket || !directMessageId) return;
 
@@ -105,12 +142,12 @@ export default function ChatWindow({
     };
   }, [socket, directMessageId]);
 
-  // Mark messages as read when entering the chat
-  useEffect(() => {
-    if (directMessageId) {
-      markDirectMessageAsRead.mutate(directMessageId);
-    }
-  }, [directMessageId, markDirectMessageAsRead]);
+  //   // Mark messages as read when entering the chat
+  //   useEffect(() => {
+  //     if (directMessageId) {
+  //       markDirectMessageAsRead.mutate(directMessageId);
+  //     }
+  //   }, [directMessageId, markDirectMessageAsRead]);
 
   // Initialize message reactions
   useEffect(() => {
@@ -219,7 +256,11 @@ export default function ChatWindow({
     setReplyingTo(null);
   };
 
-  const handlePreviewAttachment = (attachment: Attachment) => {
+  const handlePreviewAttachment = (
+    attachment: Attachment,
+    attachments?: Attachment[],
+  ) => {
+    setPreviewAttachments(attachments || [attachment]);
     openPreview(attachment);
   };
 
@@ -493,8 +534,28 @@ export default function ChatWindow({
       {/* Media Viewer */}
       <MediaViewer
         attachment={currentAttachment}
+        attachments={previewAttachments} // Use the message attachments instead
         isOpen={isViewerOpen}
-        onClose={closePreview}
+        onClose={() => {
+          closePreview();
+          setPreviewAttachments([]);
+        }}
+        onNext={() => {
+          const currentIndex = previewAttachments.findIndex(
+            (a) => a._id === currentAttachment?._id,
+          );
+          if (currentIndex < previewAttachments.length - 1) {
+            openPreview(previewAttachments[currentIndex + 1]);
+          }
+        }}
+        onPrevious={() => {
+          const currentIndex = previewAttachments.findIndex(
+            (a) => a._id === currentAttachment?._id,
+          );
+          if (currentIndex > 0) {
+            openPreview(previewAttachments[currentIndex - 1]);
+          }
+        }}
       />
     </div>
   );

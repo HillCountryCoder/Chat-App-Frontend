@@ -1,4 +1,4 @@
-// hooks/use-file-upload.ts
+// hooks/use-file-upload.ts (Fixed)
 import { useState, useCallback, useRef } from "react";
 import { AttachmentService } from "@/lib/attachment.service";
 import { FileUploadService } from "@/lib/file-upload.service";
@@ -30,6 +30,139 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     maxFiles = FILE_CONSTRAINTS.maxFilesPerMessage,
     autoUpload = true,
   } = options;
+
+  /**
+   * Update attachment status (for real-time status updates)
+   */
+  const updateAttachmentStatus = useCallback(
+    (attachmentId: string, status: Attachment["status"], metadata?: any) => {
+      setUploadedAttachments((prev) =>
+        prev.map((attachment) =>
+          attachment._id === attachmentId
+            ? { ...attachment, status, ...(metadata && { metadata }) }
+            : attachment,
+        ),
+      );
+    },
+    [],
+  );
+
+  /**
+   * Upload specific files by ID or file objects
+   */
+  const uploadFiles = useCallback(
+    async (fileIds?: string[], filesToUploadDirectly?: PendingAttachment[]) => {
+      let filesToUpload: PendingAttachment[];
+
+      if (filesToUploadDirectly) {
+        // Use files passed directly (for auto-upload)
+        filesToUpload = filesToUploadDirectly.filter(
+          (f) => f.status === "pending",
+        );
+      } else if (fileIds) {
+        // Use current pending files state
+        filesToUpload = pendingFiles.filter(
+          (f) => fileIds.includes(f.id) && f.status === "pending",
+        );
+      } else {
+        // Upload all pending files
+        filesToUpload = pendingFiles.filter((f) => f.status === "pending");
+      }
+
+      if (filesToUpload.length === 0) {
+        console.log("No files to upload");
+        return;
+      }
+
+      setIsUploading(true);
+      abortControllerRef.current = new AbortController();
+
+      try {
+        const attachments: Attachment[] = [];
+
+        // Upload files sequentially
+        for (let i = 0; i < filesToUpload.length; i++) {
+          const pendingFile = filesToUpload[i];
+
+          // Update status to uploading
+          setPendingFiles((prev) =>
+            prev.map((f) =>
+              f.id === pendingFile.id
+                ? { ...f, status: "uploading" as const }
+                : f,
+            ),
+          );
+
+          try {
+            const attachment = await AttachmentService.uploadFile(
+              pendingFile.file,
+              (progress) => {
+                setPendingFiles((prev) =>
+                  prev.map((f) =>
+                    f.id === pendingFile.id ? { ...f, progress } : f,
+                  ),
+                );
+              },
+            );
+
+            // Update status to completed
+            setPendingFiles((prev) =>
+              prev.map((f) =>
+                f.id === pendingFile.id
+                  ? { ...f, status: "completed" as const, progress: 100 }
+                  : f,
+              ),
+            );
+
+            attachments.push(attachment);
+          } catch (error) {
+            console.error(`Failed to upload ${pendingFile.file.name}:`, error);
+            // Update status to failed
+            setPendingFiles((prev) =>
+              prev.map((f) =>
+                f.id === pendingFile.id
+                  ? {
+                      ...f,
+                      status: "failed" as const,
+                      error:
+                        error instanceof Error
+                          ? error.message
+                          : "Upload failed",
+                    }
+                  : f,
+              ),
+            );
+
+            throw error;
+          }
+        }
+
+        // Add to uploaded attachments
+        setUploadedAttachments((prev) => [...prev, ...attachments]);
+
+        // Remove completed pending files
+        const completedIds = filesToUpload.map((f) => f.id);
+        setPendingFiles((prev) =>
+          prev.filter((f) => !completedIds.includes(f.id)),
+        );
+
+        onSuccess?.(attachments);
+        toast.success(`Successfully uploaded ${attachments.length} file(s)`);
+      } catch (error) {
+        console.error("Upload failed:", error);
+        const errorMessage =
+          error instanceof Error ? error.message : "Upload failed";
+        onError?.(error instanceof Error ? error : new Error(errorMessage));
+        toast.error("Upload failed", {
+          description: errorMessage,
+        });
+      } finally {
+        setIsUploading(false);
+        abortControllerRef.current = null;
+      }
+    },
+    [pendingFiles, onSuccess, onError],
+  );
 
   /**
    * Add files to pending queue
@@ -97,11 +230,20 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         });
       }
 
+      // Update state first
       setPendingFiles((prev) => [...prev, ...newPendingFiles]);
 
-      // Auto-upload if enabled
+      console.log(
+        `Added ${newPendingFiles.length} new pending files. Total will be: ${
+          pendingFiles.length + newPendingFiles.length
+        }`,
+      );
+
+      // Auto-upload if enabled - pass the new files directly
       if (autoUpload) {
-        uploadFiles(newPendingFiles.map((pf) => pf.id));
+        console.log("Auto-upload enabled, starting upload with new files");
+        // Pass the new files directly instead of relying on state
+        uploadFiles(undefined, newPendingFiles);
       }
     },
     [
@@ -110,6 +252,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       maxFiles,
       onError,
       autoUpload,
+      uploadFiles,
     ],
   );
 
@@ -135,109 +278,6 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       prev.filter((a) => a._id !== attachmentId),
     );
   }, []);
-
-  /**
-   * Upload specific files by ID
-   */
-  const uploadFiles = useCallback(
-    async (fileIds?: string[]) => {
-      const filesToUpload = fileIds
-        ? pendingFiles.filter(
-            (f) => fileIds.includes(f.id) && f.status === "pending",
-          )
-        : pendingFiles.filter((f) => f.status === "pending");
-
-      if (filesToUpload.length === 0) return;
-
-      setIsUploading(true);
-      abortControllerRef.current = new AbortController();
-
-      try {
-        const attachments: Attachment[] = [];
-
-        // Upload files sequentially
-        for (let i = 0; i < filesToUpload.length; i++) {
-          const pendingFile = filesToUpload[i];
-
-          // Update status to uploading
-          setPendingFiles((prev) =>
-            prev.map((f) =>
-              f.id === pendingFile.id
-                ? { ...f, status: "uploading" as const }
-                : f,
-            ),
-          );
-
-          try {
-            const attachment = await AttachmentService.uploadFile(
-              pendingFile.file,
-              (progress) => {
-                setPendingFiles((prev) =>
-                  prev.map((f) =>
-                    f.id === pendingFile.id ? { ...f, progress } : f,
-                  ),
-                );
-              },
-            );
-
-            // Update status to completed
-            setPendingFiles((prev) =>
-              prev.map((f) =>
-                f.id === pendingFile.id
-                  ? { ...f, status: "completed" as const, progress: 100 }
-                  : f,
-              ),
-            );
-
-            attachments.push(attachment);
-          } catch (error) {
-            // Update status to failed
-            setPendingFiles((prev) =>
-              prev.map((f) =>
-                f.id === pendingFile.id
-                  ? {
-                      ...f,
-                      status: "failed" as const,
-                      error:
-                        error instanceof Error
-                          ? error.message
-                          : "Upload failed",
-                    }
-                  : f,
-              ),
-            );
-
-            throw error;
-          }
-        }
-
-        // Add to uploaded attachments
-        setUploadedAttachments((prev) => [...prev, ...attachments]);
-
-        // Remove completed pending files
-        const completedIds = filesToUpload.map((f) => f.id);
-        setPendingFiles((prev) =>
-          prev.filter((f) => !completedIds.includes(f.id)),
-        );
-
-        onSuccess?.(attachments);
-
-        toast.success(`Successfully uploaded ${attachments.length} file(s)`);
-      } catch (error) {
-        console.error("Upload failed:", error);
-        const errorMessage =
-          error instanceof Error ? error.message : "Upload failed";
-        onError?.(error instanceof Error ? error : new Error(errorMessage));
-        toast.error("Upload failed", {
-          description: errorMessage,
-        });
-      } finally {
-        setIsUploading(false);
-        abortControllerRef.current = null;
-      }
-    },
-    [pendingFiles, onSuccess, onError],
-  );
 
   /**
    * Cancel all uploads
@@ -354,6 +394,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     cancelUploads,
     clearAll,
     retryFailedUploads,
+    updateAttachmentStatus, // NEW: Add this function
 
     // Computed
     getTotalSize,

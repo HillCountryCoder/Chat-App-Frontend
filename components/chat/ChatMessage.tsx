@@ -19,7 +19,10 @@ interface ChatMessageProps {
   message: Message;
   recipient?: User;
   onReply?: (message: Message) => void;
-  onPreviewAttachment?: (attachment: Attachment) => void;
+  onPreviewAttachment?: (
+    attachment: Attachment,
+    attachments?: Attachment[],
+  ) => void;
 }
 
 interface ReactionResponse {
@@ -51,7 +54,6 @@ export default function ChatMessage({
       onReply(message);
     }
   };
-
   const isActive = activeMessageId === message._id;
 
   const senderIdValue =
@@ -144,7 +146,15 @@ export default function ChatMessage({
   // Check if message has content or attachments
   const hasTextContent = message.content && message.content.trim() !== "📎";
   const hasAttachments = message.attachments && message.attachments.length > 0;
-
+  console.log("ChatMessage rendered", hasAttachments, message.attachments);
+  const handlePreviewAttachment = (
+    attachment: Attachment,
+    attachments?: Attachment[],
+  ) => {
+    if (onPreviewAttachment) {
+      onPreviewAttachment(attachment, attachments);
+    }
+  };
   return (
     <div
       className={cn(
@@ -233,7 +243,9 @@ export default function ChatMessage({
                 <AttachmentDisplay
                   attachments={message.attachments}
                   isInMessage={true}
-                  onPreview={onPreviewAttachment}
+                  onPreview={(attachment) =>
+                    handlePreviewAttachment(attachment, message.attachments)
+                  }
                 />
               </div>
             )}
