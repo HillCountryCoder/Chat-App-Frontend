@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AttachmentService } from "@/lib/attachment.service";
 import { Attachment } from "@/types/attachment";
 import { useSocket } from "@/providers/socket-provider";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 export function useUserAttachments() {
@@ -58,18 +58,27 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
     >
   >({});
 
+  // Track previously subscribed IDs to avoid unnecessary re-subscriptions
+  const previousIdsRef = useRef<string[]>([]);
+
   // Memoize the attachment IDs to prevent unnecessary re-subscriptions
   const memoizedAttachmentIds = useMemo(() => {
-    // Sort to ensure consistent array comparison
     return [...attachmentIds].sort();
   }, [attachmentIds]);
 
-  // Create a stable string key for comparison
-  const attachmentIdsKey = memoizedAttachmentIds.join(",");
-
   useEffect(() => {
     if (!socket || memoizedAttachmentIds.length === 0) {
-      console.log("Skipping subscription - no socket or no attachment IDs");
+      return;
+    }
+
+    // Check if the IDs actually changed
+    const previousIds = previousIdsRef.current;
+    const hasChanged =
+      previousIds.length !== memoizedAttachmentIds.length ||
+      !previousIds.every((id, index) => id === memoizedAttachmentIds[index]);
+
+    if (!hasChanged) {
+      console.log("Attachment IDs unchanged, skipping re-subscription");
       return;
     }
 
@@ -77,6 +86,9 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
       "Subscribing to attachment updates for IDs:",
       memoizedAttachmentIds,
     );
+
+    // Update the ref with current IDs
+    previousIdsRef.current = [...memoizedAttachmentIds];
 
     // Subscribe to attachment updates
     socket.emit("subscribe_attachment_updates", {
@@ -98,7 +110,7 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
           error: data.error,
         },
       }));
-      // Show toast for completion or failure
+
       if (data.status === "ready") {
         toast.success("File processed successfully");
       } else if (data.status === "failed") {
@@ -123,11 +135,6 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
     socket.on("attachment_processing_complete", handleProcessingComplete);
 
     return () => {
-      console.log(
-        "Unsubscribing from attachment updates for IDs:",
-        memoizedAttachmentIds,
-      );
-
       socket.off("attachment_status_update", handleStatusUpdate);
       socket.off("attachment_processing_complete", handleProcessingComplete);
 
@@ -136,7 +143,7 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
         attachmentIds: memoizedAttachmentIds,
       });
     };
-  }, [socket, attachmentIdsKey]); // Use the string key instead of the array
+  }, [socket, memoizedAttachmentIds]);
 
   return {
     statusUpdates,

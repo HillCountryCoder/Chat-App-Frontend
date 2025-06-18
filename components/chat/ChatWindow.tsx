@@ -101,12 +101,10 @@ export default function ChatWindow({
   } = useAttachmentPreview();
 
   const currentAttachmentIds = useMemo(() => {
-    return getAttachmentIds();
-  }, [uploadedAttachments]); // Only depend on uploadedAttachments, not the function
-  // Subscribe to attachment status updates with stable IDs
+    return uploadedAttachments.map((a) => a._id);
+  }, [uploadedAttachments]);
   const { statusUpdates } = useAttachmentStatusUpdates(currentAttachmentIds);
 
-  // NEW: Sync status updates to useFileUpload
   useEffect(() => {
     Object.entries(statusUpdates).forEach(([attachmentId, update]) => {
       const currentAttachment = uploadedAttachments.find(
@@ -123,7 +121,6 @@ export default function ChatWindow({
     });
   }, [statusUpdates, uploadedAttachments, updateAttachmentStatus]);
 
-  // Log status updates for debugging
   useEffect(() => {
     if (Object.keys(statusUpdates).length > 0) {
       console.log("Attachment status updates:", statusUpdates);
