@@ -146,7 +146,6 @@ export default function ChatMessage({
   // Check if message has content or attachments
   const hasTextContent = message.content && message.content.trim() !== "📎";
   const hasAttachments = message.attachments && message.attachments.length > 0;
-  console.log("ChatMessage rendered", hasAttachments, message.attachments);
   const handlePreviewAttachment = (
     attachment: Attachment,
     attachments?: Attachment[],
