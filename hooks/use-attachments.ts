@@ -71,7 +71,6 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
       return;
     }
 
-    // Check if the IDs actually changed
     const previousIds = previousIdsRef.current;
     const hasChanged =
       previousIds.length !== memoizedAttachmentIds.length ||
@@ -86,13 +85,12 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
       "Subscribing to attachment updates for IDs:",
       memoizedAttachmentIds,
     );
-
-    // Update the ref with current IDs
     previousIdsRef.current = [...memoizedAttachmentIds];
 
-    // Subscribe to attachment updates
+    // Subscribe and request current status for all attachments
     socket.emit("subscribe_attachment_updates", {
       attachmentIds: memoizedAttachmentIds,
+      requestCurrentStatus: true, // Add this flag to get current status
     });
 
     const handleStatusUpdate = (data: {
@@ -120,25 +118,55 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
       }
     };
 
+    // Handle initial status response
+    const handleInitialStatus = (data: {
+      attachmentStatuses: Array<{
+        attachmentId: string;
+        status: Attachment["status"];
+        metadata?: any;
+      }>;
+    }) => {
+      console.log("Received initial status for attachments:", data);
+      const initialUpdates: Record<string, any> = {};
+
+      data.attachmentStatuses.forEach(({ attachmentId, status, metadata }) => {
+        initialUpdates[attachmentId] = { status, metadata };
+      });
+
+      setStatusUpdates((prev) => ({ ...prev, ...initialUpdates }));
+    };
+
     const handleProcessingComplete = (data: {
       attachmentId: string;
       status: Attachment["status"];
       fileName: string;
     }) => {
       console.log("Processing complete in socket:", data);
+
+      // Update status updates state
+      setStatusUpdates((prev) => ({
+        ...prev,
+        [data.attachmentId]: {
+          status: data.status,
+          metadata: prev[data.attachmentId]?.metadata,
+          error: prev[data.attachmentId]?.error,
+        },
+      }));
+
       if (data.status === "ready") {
         toast.success(`${data.fileName} is ready`);
       }
     };
 
     socket.on("attachment_status_update", handleStatusUpdate);
+    socket.on("attachment_initial_status", handleInitialStatus); // New event
     socket.on("attachment_processing_complete", handleProcessingComplete);
 
     return () => {
       socket.off("attachment_status_update", handleStatusUpdate);
+      socket.off("attachment_initial_status", handleInitialStatus);
       socket.off("attachment_processing_complete", handleProcessingComplete);
 
-      // Unsubscribe from updates
       socket.emit("unsubscribe_attachment_updates", {
         attachmentIds: memoizedAttachmentIds,
       });

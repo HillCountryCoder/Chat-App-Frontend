@@ -113,7 +113,6 @@ export default function MediaViewer({
 
   const currentIndex = attachments.findIndex((a) => a._id === attachment._id);
   const hasMultiple = attachments.length > 1;
-  console.log("Current index:", currentIndex, "Has multiple:", attachments);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
