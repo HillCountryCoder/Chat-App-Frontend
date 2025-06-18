@@ -118,8 +118,8 @@ export default function MediaViewer({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogTitle>{attachment.name}</DialogTitle>
-      <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-0">
-        <div className="relative w-full h-[95vh] flex flex-col">
+      <DialogContent className="!max-w-[80vw] max-h-[95vh] p-0 bg-black/95 dark:bg-black/95 border-0">
+        <div className="relative w-full h-[95vh] flex flex-col bg-black/95 dark:bg-black/95">
           {/* Header */}
           <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent p-4">
             <div className="flex items-center justify-between text-white">
@@ -213,7 +213,7 @@ export default function MediaViewer({
                   size="lg"
                   variant="ghost"
                   onClick={onPrevious}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 z-10 text-white hover:bg-white/20 rounded-full"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-black/60 hover:bg-black/80 text-white border border-white/20 rounded-full w-12 h-12 shadow-lg backdrop-blur-sm"
                 >
                   <ChevronLeft className="h-6 w-6" />
                 </Button>
@@ -224,7 +224,7 @@ export default function MediaViewer({
                   size="lg"
                   variant="ghost"
                   onClick={onNext}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 z-10 text-white hover:bg-white/20 rounded-full"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-black/60 hover:bg-black/80 text-white border border-white/20 rounded-full w-12 h-12 shadow-lg backdrop-blur-sm"
                 >
                   <ChevronRight className="h-6 w-6" />
                 </Button>
@@ -235,7 +235,7 @@ export default function MediaViewer({
           {/* Content */}
           <div
             ref={containerRef}
-            className="flex-1 flex items-center justify-center p-4 pt-20 overflow-hidden"
+            className="flex-1 flex items-center justify-center p-4 pt-20 overflow-hidden bg-black/95 dark:bg-black/95"
             onClick={(e) => e.target === e.currentTarget && onClose()}
           >
             {isLoading && (
