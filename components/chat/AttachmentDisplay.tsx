@@ -43,40 +43,28 @@ export default function AttachmentDisplay({
       openPreview(attachment);
     }
   };
+
   const images = attachments.filter((a) => a.type.startsWith("image/"));
   const videos = attachments.filter((a) => a.type.startsWith("video/"));
   const documents = attachments.filter(
     (a) => !a.type.startsWith("image/") && !a.type.startsWith("video/"),
   );
-    return (
+
+  return (
     <div className={cn("space-y-2", className)}>
-      {/* Image grid */}
-      {images.length > 0 && (
-        <ImageGrid 
-          images={images} 
+      {/* Combined media grid (images and videos together) */}
+      {(images.length > 0 || videos.length > 0) && (
+        <MediaGrid
+          media={[...images, ...videos]}
           onPreview={handlePreview}
           isInMessage={isInMessage}
         />
       )}
 
-      {/* Video list */}
-      {videos.length > 0 && (
-        <div className="space-y-2">
-          {videos.map(video => (
-            <VideoAttachment
-              key={video._id}
-              attachment={video}
-              onPreview={handlePreview}
-              isInMessage={isInMessage}
-            />
-          ))}
-        </div>
-      )}
-
       {/* Document list */}
       {documents.length > 0 && (
         <div className="space-y-2">
-          {documents.map(doc => (
+          {documents.map((doc) => (
             <DocumentAttachment
               key={doc._id}
               attachment={doc}
@@ -89,17 +77,18 @@ export default function AttachmentDisplay({
     </div>
   );
 }
-function ImageGrid({ 
-  images, 
-  onPreview, 
-  isInMessage 
-}: { 
-  images: Attachment[]; 
+
+function MediaGrid({
+  media,
+  onPreview,
+  isInMessage,
+}: {
+  media: Attachment[];
   onPreview: (attachment: Attachment) => void;
   isInMessage: boolean;
 }) {
   const getGridClass = () => {
-    switch (images.length) {
+    switch (media.length) {
       case 1:
         return "grid-cols-1";
       case 2:
@@ -113,125 +102,148 @@ function ImageGrid({
     }
   };
 
-  const getImageSize = (index: number) => {
-    if (images.length === 3 && index === 0) {
+  const getItemSize = (index: number) => {
+    if (media.length === 3 && index === 0) {
       return "col-span-2 row-span-2";
     }
     return "";
   };
 
-  return (
-    <div className={cn(
-      "grid gap-1 rounded-lg overflow-hidden",
-      getGridClass(),
-      isInMessage ? "max-w-md" : "max-w-lg"
-    )}>
-      {images.slice(0, 9).map((image, index) => (
-        <div
-          key={image._id}
-          className={cn(
-            "relative cursor-pointer group bg-muted",
-            getImageSize(index),
-            images.length === 1 ? "aspect-video max-h-64" : "aspect-square"
-          )}
-          onClick={() => onPreview(image)}
-        >
-          <img
-            src={image.metadata.thumbnail?.url || image.url}
-            alt={image.name}
-            className="w-full h-full object-cover transition-transform group-hover:scale-105"
-            loading="lazy"
-          />
-          
-          {/* Overlay */}
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-          
-          {/* Status indicator */}
-          {image.status !== "ready" && (
-            <div className="absolute top-2 left-2">
-              <AttachmentStatusBadge status={image.status} />
-            </div>
-          )}
+  const getAspectRatio = (index: number) => {
+    if (media.length === 1) {
+      // Single media item gets video aspect ratio for better display
+      return "aspect-video max-h-80";
+    }
+    if (media.length === 3 && index === 0) {
+      return "aspect-square";
+    }
+    return "aspect-square";
+  };
 
-          {/* Show remaining count for 9+ images */}
-          {index === 8 && images.length > 9 && (
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-              <span className="text-white font-medium text-lg">
-                +{images.length - 9}
-              </span>
-            </div>
-          )}
-        </div>
+  return (
+    <div
+      className={cn(
+        "grid gap-0.5 overflow-hidden",
+        getGridClass(),
+        // Remove border radius from container as it's handled per item
+        isInMessage ? "max-w-md" : "max-w-lg",
+      )}
+    >
+      {media.slice(0, 9).map((item, index) => (
+        <MediaItem
+          key={item._id}
+          attachment={item}
+          index={index}
+          totalCount={media.length}
+          onPreview={onPreview}
+          className={cn(getItemSize(index), getAspectRatio(index))}
+        />
       ))}
+
+      {/* Show remaining count for 9+ items */}
+      {media.length > 9 && (
+        <div className="aspect-square bg-black/70 flex items-center justify-center">
+          <span className="text-white font-medium text-lg">
+            +{media.length - 9}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
 
-function VideoAttachment({ 
-  attachment, 
-  onPreview, 
-  isInMessage 
-}: { 
-  attachment: Attachment; 
+function MediaItem({
+  attachment,
+  index,
+  totalCount,
+  onPreview,
+  className,
+}: {
+  attachment: Attachment;
+  index: number;
+  totalCount: number;
   onPreview: (attachment: Attachment) => void;
-  isInMessage: boolean;
+  className?: string;
 }) {
+  const isVideo = attachment.type.startsWith("video/");
+  const isImage = attachment.type.startsWith("image/");
+
   return (
-    <div 
+    <div
       className={cn(
-        "relative rounded-lg overflow-hidden bg-muted cursor-pointer group",
-        isInMessage ? "max-w-md aspect-video" : "max-w-lg aspect-video"
+        "relative cursor-pointer group bg-muted overflow-hidden",
+        className,
       )}
       onClick={() => onPreview(attachment)}
     >
-      {/* Video thumbnail */}
-      {attachment.metadata.thumbnail?.url ? (
+      {/* Media content */}
+      {isImage && (
         <img
-          src={attachment.metadata.thumbnail.url}
+          src={attachment.metadata.thumbnail?.url || attachment.url}
           alt={attachment.name}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover transition-transform group-hover:scale-105"
+          loading="lazy"
         />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center">
-          <VideoIcon className="h-12 w-12 text-muted-foreground" />
-        </div>
       )}
 
-      {/* Play button overlay */}
-      <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/50 transition-colors">
-        <div className="bg-white rounded-full p-3 group-hover:scale-110 transition-transform">
-          <PlayIcon className="h-6 w-6 text-black fill-black ml-0.5" />
-        </div>
-      </div>
-
-      {/* Video info */}
-      <div className="absolute bottom-2 left-2 right-2">
-        <div className="bg-black/70 rounded px-2 py-1 text-white text-xs">
-          <p className="truncate">{attachment.name}</p>
-          {attachment.metadata.duration && (
-            <p className="text-white/70">
-              {formatDuration(attachment.metadata.duration)}
-            </p>
+      {isVideo && (
+        <>
+          {attachment.metadata.thumbnail?.url ? (
+            <img
+              src={attachment.metadata.thumbnail.url}
+              alt={attachment.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-muted">
+              <VideoIcon className="h-8 w-8 text-muted-foreground" />
+            </div>
           )}
-        </div>
-      </div>
+
+          {/* Video play button overlay */}
+          <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/20 transition-colors">
+            <div className="bg-black/50 rounded-full p-2 group-hover:scale-110 transition-transform">
+              <PlayIcon className="h-4 w-4 text-white fill-white ml-0.5" />
+            </div>
+          </div>
+
+          {/* Video duration */}
+          {attachment.metadata.duration && totalCount === 1 && (
+            <div className="absolute bottom-2 right-2 bg-black/70 rounded px-1.5 py-0.5 text-white text-xs">
+              {formatDuration(attachment.metadata.duration)}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Hover overlay */}
+      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
 
       {/* Status indicator */}
       {attachment.status !== "ready" && (
-        <div className="absolute top-2 right-2">
+        <div className="absolute top-2 left-2">
           <AttachmentStatusBadge status={attachment.status} />
+        </div>
+      )}
+
+      {/* Show remaining count overlay for the last visible item */}
+      {index === 8 && totalCount > 9 && (
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+          <span className="text-white font-medium text-lg">
+            +{totalCount - 9}
+          </span>
         </div>
       )}
     </div>
   );
 }
 
-function DocumentAttachment({ 
-  attachment, 
-  onPreview, 
-  isInMessage 
-}: { 
-  attachment: Attachment; 
+function DocumentAttachment({
+  attachment,
+  onPreview,
+  isInMessage,
+}: {
+  attachment: Attachment;
   onPreview: (attachment: Attachment) => void;
   isInMessage: boolean;
 }) {
@@ -252,9 +264,9 @@ function DocumentAttachment({
   };
 
   const getFileIcon = () => {
-    if (attachment.type.includes('pdf')) return FileTextIcon;
-    if (attachment.type.includes('word')) return FileTextIcon;
-    if (attachment.type.includes('text')) return FileTextIcon;
+    if (attachment.type.includes("pdf")) return FileTextIcon;
+    if (attachment.type.includes("word")) return FileTextIcon;
+    if (attachment.type.includes("text")) return FileTextIcon;
     return FileIcon;
   };
 
@@ -262,11 +274,11 @@ function DocumentAttachment({
   const canPreviewFile = AttachmentService.canPreview(attachment);
 
   return (
-    <div 
+    <div
       className={cn(
         "flex items-center gap-3 p-3 border rounded-lg bg-background hover:bg-accent/50 transition-colors",
         canPreviewFile && "cursor-pointer",
-        isInMessage ? "max-w-md" : "max-w-lg"
+        isInMessage ? "max-w-md" : "max-w-lg",
       )}
       onClick={canPreviewFile ? () => onPreview(attachment) : undefined}
     >
@@ -305,7 +317,7 @@ function DocumentAttachment({
             <ExternalLink className="h-4 w-4" />
           </Button>
         )}
-        
+
         <Button
           size="sm"
           variant="ghost"
@@ -323,7 +335,7 @@ function DocumentAttachment({
   );
 }
 
-function AttachmentStatusBadge({ status }: { status: Attachment['status'] }) {
+function AttachmentStatusBadge({ status }: { status: Attachment["status"] }) {
   const config = {
     uploading: { icon: Loader2, color: "bg-blue-500", label: "Uploading" },
     processing: { icon: Loader2, color: "bg-yellow-500", label: "Processing" },
@@ -334,12 +346,19 @@ function AttachmentStatusBadge({ status }: { status: Attachment['status'] }) {
   const { icon: Icon, color, label } = config[status];
 
   return (
-    <Badge 
-      variant="secondary" 
+    <Badge
+      variant="secondary"
       className={cn("text-white text-xs", color)}
       title={label}
     >
-      {Icon && <Icon className={cn("h-3 w-3", status.includes('ing') ? "animate-spin" : "")} />}
+      {Icon && (
+        <Icon
+          className={cn(
+            "h-3 w-3",
+            status.includes("ing") ? "animate-spin" : "",
+          )}
+        />
+      )}
     </Badge>
   );
 }
@@ -350,7 +369,9 @@ function formatDuration(seconds: number): string {
   const remainingSeconds = Math.floor(seconds % 60);
 
   if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${remainingSeconds
+      .toString()
+      .padStart(2, "0")}`;
   }
-  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }

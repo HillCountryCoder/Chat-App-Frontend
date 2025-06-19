@@ -146,6 +146,18 @@ export default function ChatMessage({
   // Check if message has content or attachments
   const hasTextContent = message.content && message.content.trim() !== "📎";
   const hasAttachments = message.attachments && message.attachments.length > 0;
+
+  // Check if it's media-only message (images/videos only)
+  const isMediaOnlyMessage = hasAttachments && !hasTextContent;
+  const mediaAttachments =
+    message.attachments?.filter(
+      (a) => a.type.startsWith("image/") || a.type.startsWith("video/"),
+    ) || [];
+  const documentAttachments =
+    message.attachments?.filter(
+      (a) => !a.type.startsWith("image/") && !a.type.startsWith("video/"),
+    ) || [];
+
   const handlePreviewAttachment = (
     attachment: Attachment,
     attachments?: Attachment[],
@@ -154,6 +166,7 @@ export default function ChatMessage({
       onPreviewAttachment(attachment, attachments);
     }
   };
+
   return (
     <div
       className={cn(
@@ -219,31 +232,71 @@ export default function ChatMessage({
           } items-start gap-2`}
         >
           <div className="space-y-2">
-            {/* Text message bubble */}
-            {hasTextContent && (
-              <div
-                className={cn(
-                  "px-4 py-2 rounded-2xl transition-colors",
-                  isOwnMessage
-                    ? "bg-chat-message-bg text-chat-message-fg rounded-br-none"
-                    : "bg-muted text-foreground rounded-bl-none",
-                  isActive && "shadow-[inset_0_0_0_1000px_rgba(0,0,0,0.2)]",
-                )}
-              >
-                <p>{message.content}</p>
-              </div>
-            )}
+            {/* Main Message Container */}
+            <div
+              className={cn(
+                "relative rounded-2xl transition-colors overflow-hidden",
+                isOwnMessage
+                  ? "bg-chat-message-bg text-chat-message-fg rounded-br-none"
+                  : "bg-muted text-foreground rounded-bl-none",
+                isActive && "shadow-[inset_0_0_0_1000px_rgba(0,0,0,0.2)]",
+                // Remove padding for media-only messages
+                isMediaOnlyMessage ? "p-0" : "p-1",
+              )}
+            >
+              {/* Media attachments (at the top or standalone) */}
+              {mediaAttachments.length > 0 && (
+                <div
+                  className={cn(
+                    // Remove border radius for embedded media
+                    isMediaOnlyMessage
+                      ? "rounded-2xl overflow-hidden"
+                      : "mb-2 rounded-lg overflow-hidden",
+                    isOwnMessage && isMediaOnlyMessage && "rounded-br-none",
+                    !isOwnMessage && isMediaOnlyMessage && "rounded-bl-none",
+                  )}
+                >
+                  <AttachmentDisplay
+                    attachments={mediaAttachments}
+                    isInMessage={true}
+                    onPreview={(attachment) =>
+                      handlePreviewAttachment(attachment, mediaAttachments)
+                    }
+                  />
+                </div>
+              )}
 
-            {/* Attachments */}
-            {hasAttachments && (
+              {/* Text content */}
+              {hasTextContent && (
+                <div className={cn(isMediaOnlyMessage ? "p-4 pt-2" : "pl-2 pb-2")}>
+                  <p>{message.content}</p>
+                </div>
+              )}
+
+              {/* Time stamp overlay for media-only messages */}
+              {isMediaOnlyMessage && (
+                <div
+                  className={cn(
+                    "absolute bottom-2 flex items-center gap-1 px-2 py-1 rounded-full bg-black/50 text-white text-xs",
+                    isOwnMessage ? "right-2" : "left-2",
+                  )}
+                >
+                  <span>{formatTime(message.createdAt)}</span>
+                  {isOwnMessage && <Check className="h-3 w-3" />}
+                </div>
+              )}
+            </div>
+
+            {/* Document attachments (always separate) */}
+            {documentAttachments.length > 0 && (
               <div
                 className={cn("max-w-md", isOwnMessage && "flex justify-end")}
               >
                 <AttachmentDisplay
-                  attachments={message.attachments}
+                  attachments={documentAttachments}
                   isInMessage={true}
                   onPreview={(attachment) =>
-                    handlePreviewAttachment(attachment, message.attachments)
+                    handlePreviewAttachment(attachment, documentAttachments)
                   }
                 />
               </div>
@@ -281,19 +334,22 @@ export default function ChatMessage({
           )}
         </div>
 
-        <div
-          className={cn(
-            "flex items-center mt-1 text-xs text-muted-chat-fg",
-            isOwnMessage ? "justify-end" : "justify-start",
-          )}
-        >
-          <span>{formatTime(message.createdAt)}</span>
-          {isOwnMessage && (
-            <div className="ml-1 flex items-center">
-              <Check className="h-3 w-3" />
-            </div>
-          )}
-        </div>
+        {/* Time and status (only for non-media-only messages) */}
+        {!isMediaOnlyMessage && (
+          <div
+            className={cn(
+              "flex items-center mt-1 text-xs text-muted-chat-fg",
+              isOwnMessage ? "justify-end" : "justify-start",
+            )}
+          >
+            <span>{formatTime(message.createdAt)}</span>
+            {isOwnMessage && (
+              <div className="ml-1 flex items-center">
+                <Check className="h-3 w-3" />
+              </div>
+            )}
+          </div>
+        )}
 
         {localReactions.length > 0 && (
           <MessageReactions
