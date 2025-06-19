@@ -9,7 +9,6 @@ import {
   Download,
   ExternalLink,
   FileIcon,
-  ImageIcon,
   VideoIcon,
   FileTextIcon,
   AlertCircle,
@@ -33,9 +32,10 @@ export default function AttachmentDisplay({
   className,
   onPreview,
 }: AttachmentDisplayProps) {
+  const { openPreview } = useAttachmentPreview();
+  
   if (attachments.length === 0) return null;
 
-  const { openPreview, canPreview } = useAttachmentPreview();
   const handlePreview = (attachment: Attachment) => {
     if (onPreview) {
       onPreview(attachment);
@@ -178,21 +178,27 @@ function MediaItem({
     >
       {/* Media content */}
       {isImage && (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={attachment.metadata.thumbnail?.url || attachment.url}
           alt={attachment.name}
           className="w-full h-full object-cover transition-transform group-hover:scale-105"
           loading="lazy"
+          fetchPriority="low"
+          decoding="async"
         />
       )}
 
       {isVideo && (
         <>
           {attachment.metadata.thumbnail?.url ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={attachment.metadata.thumbnail.url}
               alt={attachment.name}
               className="w-full h-full object-cover"
+              fetchPriority="low"
+              decoding="async"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-muted">

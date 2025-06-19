@@ -25,6 +25,7 @@ export default function FileUploadDropzone({
   compact = false,
 }: FileUploadDropzoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [dragCounter, setDragCounter] = useState(0);
 
   const handleDragEnter = useCallback((e: DragEvent) => {
@@ -85,14 +86,20 @@ export default function FileUploadDropzone({
 
   const openFileDialog = useCallback(() => {
     if (disabled) return;
-	console.log("Opening file dialog");
+    console.log("Opening file dialog");
     const input = document.createElement("input");
     input.type = "file";
     input.multiple = true;
     input.accept = FILE_CONSTRAINTS.allowedTypes.join(",");
-    input.onchange = handleFileSelect;
+    input.onchange = (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      const files = Array.from(target.files || []);
+      if (files.length > 0) {
+        onFilesSelected(files);
+      }
+    };
     input.click();
-  }, [disabled, handleFileSelect]);
+  }, [disabled, onFilesSelected]);
 
   const remainingFiles = Math.max(0, maxFiles - currentFileCount);
   const canAddFiles = remainingFiles > 0 && !disabled;
