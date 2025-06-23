@@ -19,6 +19,7 @@ import {
   Reply,
   X,
   Upload,
+  AlertTriangle,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "../ui/skeleton";
@@ -30,6 +31,7 @@ import {
 } from "@/hooks/use-attachments";
 import { Attachment } from "@/types/attachment";
 import { cn } from "@/lib/utils";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface ChatWindowProps {
   directMessageId: string;
@@ -65,7 +67,7 @@ export default function ChatWindow({
 
   const sendMessageMutation = useSendMessage();
 
-  // File upload hook
+  // 🔥 IMPROVED: File upload hook with better error handling
   const {
     pendingFiles,
     uploadedAttachments,
@@ -73,8 +75,10 @@ export default function ChatWindow({
     addFiles,
     removeFile,
     removeAttachment,
+    removeFailedFiles,
     clearAll,
     retryFailedUploads,
+    retrySpecificFile,
     getAttachmentIds,
     isReadyToSend,
     hasFailedUploads,
@@ -82,6 +86,8 @@ export default function ChatWindow({
     getTotalCount,
     canAddMoreFiles,
     updateAttachmentStatus,
+    getFileCounts,
+    hasOnlyFailedFiles,
   } = useFileUpload({
     autoUpload: true,
     onSuccess: (attachments) => {
@@ -103,6 +109,7 @@ export default function ChatWindow({
   const currentAttachmentIds = useMemo(() => {
     return uploadedAttachments.map((a) => a._id);
   }, [uploadedAttachments]);
+
   const { statusUpdates } = useAttachmentStatusUpdates(currentAttachmentIds);
 
   useEffect(() => {
@@ -111,8 +118,10 @@ export default function ChatWindow({
         (a) => a._id === attachmentId,
       );
 
-      // Only update if the status has actually changed
       if (currentAttachment && currentAttachment.status !== update.status) {
+        console.log(
+          `Updating attachment ${attachmentId} status from ${currentAttachment.status} to ${update.status}`,
+        );
         updateAttachmentStatus(attachmentId, update.status, update.metadata);
       }
     });
@@ -121,11 +130,9 @@ export default function ChatWindow({
   useEffect(() => {
     if (!socket || !directMessageId) return;
 
-    // Join the direct message room immediately when component mounts
     socket.emit("join_direct_message", { directMessageId });
 
     return () => {
-      // Leave the room when component unmounts
       socket.emit("leave_direct_message", { directMessageId });
     };
   }, [socket, directMessageId]);
@@ -148,12 +155,10 @@ export default function ChatWindow({
     if (socket) {
       const handleNewMessage = (data: { message: Message }) => {
         if (data.message.directMessageId === directMessageId) {
-          // Invalidate the query to get new messages
           queryClient.invalidateQueries({
             queryKey: ["messages", "direct", directMessageId],
           });
 
-          // Mark the new message as read since we're in the conversation
           markDirectMessageAsRead.mutate(directMessageId);
         }
       };
@@ -174,7 +179,8 @@ export default function ChatWindow({
       messageId: string;
       reactions: Reaction[];
     }) => {
-      // Update local state
+      console.log("Received reaction update in ChatWindow", data);
+
       setMessageReactions((prev) => {
         const newState = { ...prev };
         newState[data.messageId] = [...data.reactions];
@@ -199,11 +205,12 @@ export default function ChatWindow({
 
     if (!newMessage.trim() && getAttachmentIds().length === 0) return;
 
+    // 🔥 IMPROVED: Can send even with failed files (they'll be excluded)
     if (!isReadyToSend()) return;
 
     sendMessageMutation.mutate(
       {
-        content: newMessage.trim() || "📎", // Use emoji if only attachments
+        content: newMessage.trim() || "📎",
         directMessageId,
         replyToId: replyingTo?._id,
         attachmentIds: getAttachmentIds(),
@@ -212,7 +219,7 @@ export default function ChatWindow({
         onSuccess: () => {
           setNewMessage("");
           setReplyingTo(null);
-          clearAll(); // Clear uploaded files after successful send
+          clearAll();
         },
         onError: (error) => {
           console.error("Failed to send message:", error);
@@ -276,8 +283,13 @@ export default function ChatWindow({
   };
 
   const isLoading = messagesLoading || recipientLoading;
+
+  // 🔥 IMPROVED: Better send button state management
+  const fileCounts = getFileCounts();
   const canSendMessage =
-    (newMessage.trim() || hasCompletedUploads) &&
+    (newMessage.trim() ||
+      hasCompletedUploads ||
+      uploadedAttachments.length > 0) &&
     isReadyToSend() &&
     !sendMessageMutation.isPending;
 
@@ -350,9 +362,7 @@ export default function ChatWindow({
           </div>
         ) : (
           <>
-            {/* Reverse the messages array to show oldest first */}
             {[...messages].reverse().map((message, index, reversedArray) => {
-              // Check if we need to display a date separator
               const showDateSeparator =
                 index === 0 ||
                 !areSameDay(
@@ -360,11 +370,9 @@ export default function ChatWindow({
                   message.createdAt,
                 );
 
-              // Get reactions for this message
               const reactions =
                 messageReactions[message._id] || message.reactions || [];
 
-              // Create a new message object with reactions
               const messageWithReactions = {
                 ...message,
                 reactions,
@@ -393,7 +401,7 @@ export default function ChatWindow({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* File Upload Dropzone (shown when drag over) */}
+      {/* File Upload Dropzone */}
       {showFileUpload && (
         <div className="absolute inset-0 z-50 bg-black/50 flex items-center justify-center p-8">
           <div className="bg-background rounded-lg p-6 max-w-md w-full">
@@ -418,6 +426,19 @@ export default function ChatWindow({
 
       {/* Input Section */}
       <div className="border-t border-border">
+        {/* 🔥 IMPROVED: Failed Files Warning */}
+        {hasFailedUploads && hasOnlyFailedFiles && (
+          <div className="p-4 pb-0">
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                All files failed to upload. Remove failed files or retry
+                uploading to send your message.
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
+
         {/* Attachment Preview */}
         {(pendingFiles.length > 0 || uploadedAttachments.length > 0) && (
           <div className="p-4 border-b border-border">
@@ -427,6 +448,10 @@ export default function ChatWindow({
               onRemoveFile={removeFile}
               onRemoveAttachment={removeAttachment}
               onRetryFailed={hasFailedUploads ? retryFailedUploads : undefined}
+              onRetrySpecificFile={retrySpecificFile}
+              onRemoveFailedFiles={
+                hasFailedUploads ? removeFailedFiles : undefined
+              }
             />
           </div>
         )}
@@ -496,6 +521,13 @@ export default function ChatWindow({
               size="icon"
               disabled={!canSendMessage}
               className={cn(isUploading && "animate-pulse")}
+              title={
+                hasOnlyFailedFiles
+                  ? "Remove failed files to send message"
+                  : canSendMessage
+                  ? "Send message"
+                  : "Add content or files to send"
+              }
             >
               {sendMessageMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

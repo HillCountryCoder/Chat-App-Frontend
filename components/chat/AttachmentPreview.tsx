@@ -14,8 +14,11 @@ import {
   ImageIcon,
   VideoIcon,
   RefreshCw,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface AttachmentPreviewProps {
   pendingFiles: PendingAttachment[];
@@ -23,6 +26,8 @@ interface AttachmentPreviewProps {
   onRemoveFile: (fileId: string) => void;
   onRemoveAttachment: (attachmentId: string) => void;
   onRetryFailed?: () => void;
+  onRetrySpecificFile?: (fileId: string) => void; // NEW: Retry specific file
+  onRemoveFailedFiles?: () => void; // NEW: Remove all failed files
   compact?: boolean;
   className?: string;
 }
@@ -33,6 +38,8 @@ export default function AttachmentPreview({
   onRemoveFile,
   onRemoveAttachment,
   onRetryFailed,
+  onRetrySpecificFile,
+  onRemoveFailedFiles,
   compact = false,
   className,
 }: AttachmentPreviewProps) {
@@ -40,7 +47,7 @@ export default function AttachmentPreview({
     ...pendingFiles,
     ...uploadedAttachments.map((a) => ({
       id: a._id,
-      file: null as any, // Uploaded files don't have File object
+      file: null as any,
       preview: a.url,
       status: a.status,
       progress: 100,
@@ -53,6 +60,13 @@ export default function AttachmentPreview({
   }
 
   const hasFailedUploads = pendingFiles.some((f) => f.status === "failed");
+  const failedCount = pendingFiles.filter((f) => f.status === "failed").length;
+  const successfulCount =
+    uploadedAttachments.length +
+    pendingFiles.filter((f) => f.status === "completed").length;
+  const uploadingCount = pendingFiles.filter(
+    (f) => f.status === "uploading",
+  ).length;
 
   if (compact) {
     return (
@@ -67,13 +81,33 @@ export default function AttachmentPreview({
           <span className="text-sm text-muted-foreground">
             {allFiles.length} file{allFiles.length !== 1 ? "s" : ""}
           </span>
+          {hasFailedUploads && (
+            <Badge variant="destructive" className="text-xs">
+              {failedCount} failed
+            </Badge>
+          )}
         </div>
 
-        {hasFailedUploads && onRetryFailed && (
-          <Button size="sm" variant="outline" onClick={onRetryFailed}>
-            <RefreshCw className="h-3 w-3 mr-1" />
-            Retry
-          </Button>
+        {hasFailedUploads && (
+          <div className="flex gap-1">
+            {onRemoveFailedFiles && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onRemoveFailedFiles}
+                className="text-red-600 border-red-600 hover:bg-red-50"
+              >
+                <Trash2 className="h-3 w-3 mr-1" />
+                Remove Failed
+              </Button>
+            )}
+            {onRetryFailed && (
+              <Button size="sm" variant="outline" onClick={onRetryFailed}>
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Retry
+              </Button>
+            )}
+          </div>
         )}
       </div>
     );
@@ -81,15 +115,76 @@ export default function AttachmentPreview({
 
   return (
     <div className={cn("space-y-3", className)}>
+      {/* Status Summary */}
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium">Attachments ({allFiles.length})</h4>
-        {hasFailedUploads && onRetryFailed && (
-          <Button size="sm" variant="outline" onClick={onRetryFailed}>
-            <RefreshCw className="h-3 w-3 mr-1" />
-            Retry Failed
-          </Button>
+        <div className="flex items-center gap-2">
+          <h4 className="text-sm font-medium">
+            Attachments ({allFiles.length})
+          </h4>
+          <div className="flex gap-1">
+            {successfulCount > 0 && (
+              <Badge
+                variant="secondary"
+                className="bg-green-100 text-green-700 text-xs"
+              >
+                {successfulCount} ready
+              </Badge>
+            )}
+            {uploadingCount > 0 && (
+              <Badge
+                variant="secondary"
+                className="bg-blue-100 text-blue-700 text-xs"
+              >
+                {uploadingCount} uploading
+              </Badge>
+            )}
+            {failedCount > 0 && (
+              <Badge variant="destructive" className="text-xs">
+                {failedCount} failed
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {hasFailedUploads && (
+          <div className="flex gap-1">
+            {onRemoveFailedFiles && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onRemoveFailedFiles}
+                className="text-red-600 border-red-600 hover:bg-red-50"
+              >
+                <Trash2 className="h-3 w-3 mr-1" />
+                Remove Failed
+              </Button>
+            )}
+            {onRetryFailed && (
+              <Button size="sm" variant="outline" onClick={onRetryFailed}>
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Retry All
+              </Button>
+            )}
+          </div>
         )}
       </div>
+
+      {/* Failed Files Warning */}
+      {hasFailedUploads && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            {failedCount} file{failedCount > 1 ? "s" : ""} failed to upload. You
+            can remove failed files or retry uploading them.
+            {successfulCount > 0 && (
+              <span className="block mt-1 text-sm">
+                {successfulCount} file{successfulCount > 1 ? "s are" : " is"}{" "}
+                ready to send.
+              </span>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {pendingFiles.map((file) => (
@@ -97,6 +192,11 @@ export default function AttachmentPreview({
             key={file.id}
             file={file}
             onRemove={() => onRemoveFile(file.id)}
+            onRetry={
+              onRetrySpecificFile
+                ? () => onRetrySpecificFile(file.id)
+                : undefined
+            }
           />
         ))}
 
@@ -115,9 +215,11 @@ export default function AttachmentPreview({
 function PendingFilePreview({
   file,
   onRemove,
+  onRetry,
 }: {
   file: PendingAttachment;
   onRemove: () => void;
+  onRetry?: () => void;
 }) {
   const getFileIcon = () => {
     if (file.file.type.startsWith("image/")) return ImageIcon;
@@ -126,18 +228,48 @@ function PendingFilePreview({
   };
 
   const IconComponent = getFileIcon();
+  const canRemove = file.status !== "uploading"; // Allow removal unless actively uploading
 
   return (
-    <div className="relative border rounded-lg p-3 bg-background">
-      {/* Remove button */}
-      <Button
-        size="sm"
-        variant="ghost"
-        className="absolute top-1 right-1 h-6 w-6 p-0 hover:bg-destructive hover:text-destructive-foreground"
-        onClick={onRemove}
-      >
-        <X className="h-3 w-3" />
-      </Button>
+    <div
+      className={cn(
+        "relative border rounded-lg p-3 bg-background transition-colors",
+        file.status === "failed" && "border-red-200 bg-red-50/50",
+        file.status === "completed" && "border-green-200 bg-green-50/50",
+        file.status === "uploading" && "border-blue-200 bg-blue-50/50",
+      )}
+    >
+      {/* Action buttons */}
+      <div className="absolute top-1 right-1 flex gap-1">
+        {file.status === "failed" && onRetry && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 hover:bg-blue-500 hover:text-white"
+            onClick={onRetry}
+            title="Retry upload"
+          >
+            <RefreshCw className="h-3 w-3" />
+          </Button>
+        )}
+
+        {canRemove && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 hover:bg-destructive hover:text-destructive-foreground"
+            onClick={onRemove}
+            title={
+              file.status === "uploading"
+                ? "Cannot remove while uploading"
+                : "Remove file"
+            }
+            disabled={file.status === "uploading"}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
 
       {/* File preview */}
       <div className="mb-3">
@@ -218,20 +350,21 @@ function UploadedAttachmentPreview({
   const IconComponent = getFileIcon();
 
   return (
-    <div className="relative border rounded-lg p-3 bg-background">
+    <div className="relative border border-green-200 bg-green-50/50 rounded-lg p-3">
       {/* Remove button */}
       <Button
         size="sm"
         variant="ghost"
         className="absolute top-1 right-1 h-6 w-6 p-0 hover:bg-destructive hover:text-destructive-foreground"
         onClick={onRemove}
+        title="Remove attachment"
       >
         <X className="h-3 w-3" />
       </Button>
 
       {/* File preview */}
       <div className="mb-3">
-        {attachment.metadata.thumbnail?.url ? (
+        {attachment.metadata?.thumbnail?.url ? (
           <div className="relative h-20 bg-muted rounded overflow-hidden">
             <img
               src={attachment.metadata.thumbnail.url}
@@ -269,14 +402,6 @@ function UploadedAttachmentPreview({
         <p className="text-xs text-muted-foreground">
           {FileUploadService.formatFileSize(attachment.size)}
         </p>
-
-        {/* Processing indicator */}
-        {attachment.status === "processing" && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Processing...
-          </div>
-        )}
       </div>
     </div>
   );
@@ -297,11 +422,6 @@ function StatusBadge({
       icon: Loader2,
       color: "bg-blue-100 text-blue-700",
       label: "Uploading",
-    },
-    processing: {
-      icon: Loader2,
-      color: "bg-yellow-100 text-yellow-700",
-      label: "Processing",
     },
     completed: {
       icon: CheckCircle,
@@ -328,9 +448,7 @@ function StatusBadge({
         <Icon
           className={cn(
             "h-2.5 w-2.5 mr-1",
-            status === "uploading" || status === "processing"
-              ? "animate-spin"
-              : "",
+            status === "uploading" ? "animate-spin" : "",
           )}
         />
       )}

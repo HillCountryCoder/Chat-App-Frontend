@@ -54,17 +54,14 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       let filesToUpload: PendingAttachment[];
 
       if (filesToUploadDirectly) {
-        // Use files passed directly (for auto-upload)
         filesToUpload = filesToUploadDirectly.filter(
           (f) => f.status === "pending",
         );
       } else if (fileIds) {
-        // Use current pending files state
         filesToUpload = pendingFiles.filter(
           (f) => fileIds.includes(f.id) && f.status === "pending",
         );
       } else {
-        // Upload all pending files
         filesToUpload = pendingFiles.filter((f) => f.status === "pending");
       }
 
@@ -75,9 +72,10 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       setIsUploading(true);
       abortControllerRef.current = new AbortController();
 
-      try {
-        const attachments: Attachment[] = [];
+      const successfulUploads: Attachment[] = [];
+      const failedUploads: string[] = [];
 
+      try {
         // Upload files sequentially
         for (let i = 0; i < filesToUpload.length; i++) {
           const pendingFile = filesToUpload[i];
@@ -103,7 +101,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
               },
             );
 
-            // No need to wait for processing
+            // Mark as completed
             setPendingFiles((prev) =>
               prev.map((f) =>
                 f.id === pendingFile.id
@@ -112,10 +110,11 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
               ),
             );
 
-            attachments.push(attachment);
+            successfulUploads.push(attachment);
           } catch (error) {
             console.error(`Failed to upload ${pendingFile.file.name}:`, error);
-            // Update status to failed
+
+            // Mark as failed but don't throw - continue with other files
             setPendingFiles((prev) =>
               prev.map((f) =>
                 f.id === pendingFile.id
@@ -131,26 +130,62 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
               ),
             );
 
-            throw error;
+            failedUploads.push(pendingFile.id);
           }
         }
 
-        // Add to uploaded attachments
-        setUploadedAttachments((prev) => [...prev, ...attachments]);
+        // Add successful uploads to uploaded attachments
+        if (successfulUploads.length > 0) {
+          setUploadedAttachments((prev) => [...prev, ...successfulUploads]);
 
-        // Remove completed pending files
-        const completedIds = filesToUpload.map((f) => f.id);
-        setPendingFiles((prev) =>
-          prev.filter((f) => !completedIds.includes(f.id)),
-        );
+          // Remove completed pending files
+          const completedIds = successfulUploads
+            .map((attachment) => {
+              const pendingFile = filesToUpload.find(
+                (f) =>
+                  f.file.name === attachment.name &&
+                  f.file.size === attachment.size,
+              );
+              return pendingFile?.id;
+            })
+            .filter(Boolean) as string[];
 
-        onSuccess?.(attachments);
+          setPendingFiles((prev) =>
+            prev.filter((f) => !completedIds.includes(f.id)),
+          );
 
-        toast.success(`Successfully uploaded ${attachments.length} file(s)`, {
-          description: "Files are ready to use",
-        });
+          onSuccess?.(successfulUploads);
+
+          // Success message
+          toast.success(
+            `Successfully uploaded ${successfulUploads.length} file(s)`,
+            {
+              description: "Files are ready to use",
+            },
+          );
+        }
+
+        // Show error summary if some failed
+        if (failedUploads.length > 0) {
+          const errorMessage =
+            successfulUploads.length > 0
+              ? `${failedUploads.length} file(s) failed to upload, ${successfulUploads.length} succeeded`
+              : `Failed to upload ${failedUploads.length} file(s)`;
+
+          toast.error("Some uploads failed", {
+            description: errorMessage,
+          });
+
+          // Don't call onError for partial failures
+          if (successfulUploads.length === 0) {
+            onError?.(
+              new Error(`All ${failedUploads.length} files failed to upload`),
+            );
+          }
+        }
       } catch (error) {
-        console.error("Upload failed:", error);
+        // This should rarely happen now since we handle individual file errors
+        console.error("Upload process failed:", error);
         const errorMessage =
           error instanceof Error ? error.message : "Upload failed";
         onError?.(error instanceof Error ? error : new Error(errorMessage));
@@ -234,9 +269,8 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       // Update state first
       setPendingFiles((prev) => [...prev, ...newPendingFiles]);
 
-      // Auto-upload if enabled - pass the new files directly
+      // Auto-upload if enabled
       if (autoUpload) {
-        // Pass the new files directly instead of relying on state
         uploadFiles(undefined, newPendingFiles);
       }
     },
@@ -272,6 +306,49 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       prev.filter((a) => a._id !== attachmentId),
     );
   }, []);
+
+  /**
+   * 🔥 NEW: Remove all failed files
+   */
+  const removeFailedFiles = useCallback(() => {
+    setPendingFiles((prev) => {
+      // Clean up preview URLs for failed files
+      const failedFiles = prev.filter((f) => f.status === "failed");
+      failedFiles.forEach((file) => {
+        if (file.preview) {
+          URL.revokeObjectURL(file.preview);
+        }
+      });
+
+      const remainingFiles = prev.filter((f) => f.status !== "failed");
+      toast.info(`Removed ${failedFiles.length} failed file(s)`);
+      return remainingFiles;
+    });
+  }, []);
+
+  /**
+   * 🔥 NEW: Retry specific file
+   */
+  const retrySpecificFile = useCallback(
+    (fileId: string) => {
+      setPendingFiles((prev) =>
+        prev.map((f) =>
+          f.id === fileId && f.status === "failed"
+            ? {
+                ...f,
+                status: "pending" as const,
+                progress: 0,
+                error: undefined,
+              }
+            : f,
+        ),
+      );
+
+      // Upload just this file
+      uploadFiles([fileId]);
+    },
+    [uploadFiles],
+  );
 
   /**
    * Cancel all uploads
@@ -357,13 +434,12 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   }, [pendingFiles.length, uploadedAttachments.length]);
 
   /**
-   * Files are ready immediately after upload completion
+   * 🔥 UPDATED: Check if ready to send - allow sending with failed files removed
    */
   const isReadyToSend = useCallback(() => {
+    const nonFailedFiles = pendingFiles.filter((f) => f.status !== "failed");
     return (
-      pendingFiles.every(
-        (f) => f.status === "completed" || f.status === "failed",
-      ) && !isUploading
+      nonFailedFiles.every((f) => f.status === "completed") && !isUploading
     );
   }, [pendingFiles, isUploading]);
 
@@ -373,6 +449,30 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   const getAttachmentIds = useCallback(() => {
     return uploadedAttachments.map((a) => a._id);
   }, [uploadedAttachments]);
+
+  /**
+   * 🔥 NEW: Get counts for different file states
+   */
+  const getFileCounts = useCallback(() => {
+    const pending = pendingFiles.filter((f) => f.status === "pending").length;
+    const uploading = pendingFiles.filter(
+      (f) => f.status === "uploading",
+    ).length;
+    const completed = pendingFiles.filter(
+      (f) => f.status === "completed",
+    ).length;
+    const failed = pendingFiles.filter((f) => f.status === "failed").length;
+    const ready = uploadedAttachments.length;
+
+    return {
+      pending,
+      uploading,
+      completed,
+      failed,
+      ready,
+      total: pending + uploading + completed + failed + ready,
+    };
+  }, [pendingFiles, uploadedAttachments]);
 
   return {
     // State
@@ -384,10 +484,12 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     addFiles,
     removeFile,
     removeAttachment,
+    removeFailedFiles, // 🔥 NEW
     uploadFiles,
     cancelUploads,
     clearAll,
     retryFailedUploads,
+    retrySpecificFile, // 🔥 NEW
     updateAttachmentStatus,
 
     // Computed
@@ -395,6 +497,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     getTotalCount,
     isReadyToSend,
     getAttachmentIds,
+    getFileCounts, // 🔥 NEW
 
     // Validation
     canAddMoreFiles: getTotalCount() < maxFiles,
@@ -402,5 +505,8 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     hasCompletedUploads:
       uploadedAttachments.length > 0 ||
       pendingFiles.some((f) => f.status === "completed"),
+    hasOnlyFailedFiles:
+      pendingFiles.length > 0 &&
+      pendingFiles.every((f) => f.status === "failed"), // 🔥 NEW
   };
 }
