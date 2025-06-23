@@ -26,8 +26,8 @@ interface AttachmentPreviewProps {
   onRemoveFile: (fileId: string) => void;
   onRemoveAttachment: (attachmentId: string) => void;
   onRetryFailed?: () => void;
-  onRetrySpecificFile?: (fileId: string) => void; // NEW: Retry specific file
-  onRemoveFailedFiles?: () => void; // NEW: Remove all failed files
+  onRetrySpecificFile?: (fileId: string) => void;
+  onRemoveFailedFiles?: () => void;
   compact?: boolean;
   className?: string;
 }
@@ -228,24 +228,26 @@ function PendingFilePreview({
   };
 
   const IconComponent = getFileIcon();
-  const canRemove = file.status !== "uploading"; // Allow removal unless actively uploading
+  const canRemove = file.status !== "uploading";
 
   return (
     <div
       className={cn(
-        "relative border rounded-lg p-3 bg-background transition-colors",
-        file.status === "failed" && "border-red-200 bg-red-50/50",
-        file.status === "completed" && "border-green-200 bg-green-50/50",
-        file.status === "uploading" && "border-blue-200 bg-blue-50/50",
+        "relative border rounded-lg overflow-hidden transition-all",
+        // 🔥 IMPROVED: Better background colors with higher contrast
+        file.status === "failed" && "border-red-300 bg-red-50 shadow-sm",
+        file.status === "completed" && "border-green-300 bg-green-50 shadow-sm",
+        file.status === "uploading" && "border-blue-300 bg-blue-50 shadow-sm",
+        file.status === "pending" && "border-gray-300 bg-gray-50 shadow-sm",
       )}
     >
-      {/* Action buttons */}
-      <div className="absolute top-1 right-1 flex gap-1">
+      {/* 🔥 IMPROVED: Action buttons with better positioning and visibility */}
+      <div className="absolute top-2 right-2 z-10 flex gap-1">
         {file.status === "failed" && onRetry && (
           <Button
             size="sm"
-            variant="ghost"
-            className="h-6 w-6 p-0 hover:bg-blue-500 hover:text-white"
+            variant="secondary"
+            className="h-7 w-7 p-0 bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0"
             onClick={onRetry}
             title="Retry upload"
           >
@@ -256,8 +258,8 @@ function PendingFilePreview({
         {canRemove && (
           <Button
             size="sm"
-            variant="ghost"
-            className="h-6 w-6 p-0 hover:bg-destructive hover:text-destructive-foreground"
+            variant="secondary"
+            className="h-7 w-7 p-0 bg-red-600 hover:bg-red-700 text-white shadow-sm border-0"
             onClick={onRemove}
             title={
               file.status === "uploading"
@@ -272,63 +274,67 @@ function PendingFilePreview({
       </div>
 
       {/* File preview */}
-      <div className="mb-3">
-        {file.preview ? (
-          <div className="relative h-20 bg-muted rounded overflow-hidden">
-            {file.file.type.startsWith("image/") ? (
-              <img
-                src={file.preview}
-                alt={file.file.name}
-                className="w-full h-full object-cover"
-              />
-            ) : file.file.type.startsWith("video/") ? (
-              <video
-                src={file.preview}
-                className="w-full h-full object-cover"
-                muted
-              />
-            ) : null}
-          </div>
-        ) : (
-          <div className="h-20 bg-muted rounded flex items-center justify-center">
-            <IconComponent className="h-8 w-8 text-muted-foreground" />
-          </div>
-        )}
-      </div>
-
-      {/* File info */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <p
-            className="text-sm font-medium truncate flex-1"
-            title={file.file.name}
-          >
-            {file.file.name}
-          </p>
-          <StatusBadge status={file.status} />
+      <div className="p-3">
+        <div className="mb-3">
+          {file.preview ? (
+            <div className="relative h-20 bg-muted rounded overflow-hidden">
+              {file.file.type.startsWith("image/") ? (
+                <img
+                  src={file.preview}
+                  alt={file.file.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : file.file.type.startsWith("video/") ? (
+                <video
+                  src={file.preview}
+                  className="w-full h-full object-cover"
+                  muted
+                />
+              ) : null}
+              {/* 🔥 IMPROVED: Overlay for better button visibility on images */}
+              <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors" />
+            </div>
+          ) : (
+            <div className="h-20 bg-muted rounded flex items-center justify-center">
+              <IconComponent className="h-8 w-8 text-muted-foreground" />
+            </div>
+          )}
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          {FileUploadService.formatFileSize(file.file.size)}
-        </p>
-
-        {/* Progress bar */}
-        {file.status === "uploading" && (
-          <div className="space-y-1">
-            <Progress value={file.progress} className="h-1" />
-            <p className="text-xs text-muted-foreground text-center">
-              {Math.round(file.progress)}%
+        {/* File info */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <p
+              className="text-sm font-medium truncate flex-1 text-gray-900"
+              title={file.file.name}
+            >
+              {file.file.name}
             </p>
+            <StatusBadge status={file.status} />
           </div>
-        )}
 
-        {/* Error message */}
-        {file.status === "failed" && file.error && (
-          <div className="flex items-start gap-1 p-2 bg-destructive/10 rounded text-xs text-destructive">
-            <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
-            <p className="leading-tight">{file.error}</p>
-          </div>
-        )}
+          <p className="text-xs text-gray-600 font-medium">
+            {FileUploadService.formatFileSize(file.file.size)}
+          </p>
+
+          {/* Progress bar */}
+          {file.status === "uploading" && (
+            <div className="space-y-1">
+              <Progress value={file.progress} className="h-2" />
+              <p className="text-xs text-gray-600 text-center font-medium">
+                {Math.round(file.progress)}%
+              </p>
+            </div>
+          )}
+
+          {/* 🔥 IMPROVED: Error message with better contrast */}
+          {file.status === "failed" && file.error && (
+            <div className="flex items-start gap-2 p-2 bg-red-100 border border-red-200 rounded text-xs text-red-800">
+              <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0 text-red-600" />
+              <p className="leading-tight font-medium">{file.error}</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -350,58 +356,66 @@ function UploadedAttachmentPreview({
   const IconComponent = getFileIcon();
 
   return (
-    <div className="relative border border-green-200 bg-green-50/50 rounded-lg p-3">
-      {/* Remove button */}
-      <Button
-        size="sm"
-        variant="ghost"
-        className="absolute top-1 right-1 h-6 w-6 p-0 hover:bg-destructive hover:text-destructive-foreground"
-        onClick={onRemove}
-        title="Remove attachment"
-      >
-        <X className="h-3 w-3" />
-      </Button>
-
-      {/* File preview */}
-      <div className="mb-3">
-        {attachment.metadata?.thumbnail?.url ? (
-          <div className="relative h-20 bg-muted rounded overflow-hidden">
-            <img
-              src={attachment.metadata.thumbnail.url}
-              alt={attachment.name}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        ) : attachment.type.startsWith("image/") ? (
-          <div className="relative h-20 bg-muted rounded overflow-hidden">
-            <img
-              src={attachment.url}
-              alt={attachment.name}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        ) : (
-          <div className="h-20 bg-muted rounded flex items-center justify-center">
-            <IconComponent className="h-8 w-8 text-muted-foreground" />
-          </div>
-        )}
+    <div className="relative border border-green-300 bg-green-50 rounded-lg overflow-hidden shadow-sm">
+      {/* 🔥 IMPROVED: Remove button with better positioning and visibility */}
+      <div className="absolute top-2 right-2 z-10">
+        <Button
+          size="sm"
+          variant="secondary"
+          className="h-7 w-7 p-0 bg-red-600 hover:bg-red-700 text-white shadow-sm border-0"
+          onClick={onRemove}
+          title="Remove attachment"
+        >
+          <X className="h-3 w-3" />
+        </Button>
       </div>
 
-      {/* File info */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <p
-            className="text-sm font-medium truncate flex-1"
-            title={attachment.name}
-          >
-            {attachment.name}
-          </p>
-          <StatusBadge status={attachment.status} />
+      {/* File preview */}
+      <div className="p-3">
+        <div className="mb-3">
+          {attachment.metadata?.thumbnail?.url ? (
+            <div className="relative h-20 bg-muted rounded overflow-hidden">
+              <img
+                src={attachment.metadata.thumbnail.url}
+                alt={attachment.name}
+                className="w-full h-full object-cover"
+              />
+              {/* Overlay for better button visibility */}
+              <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors" />
+            </div>
+          ) : attachment.type.startsWith("image/") ? (
+            <div className="relative h-20 bg-muted rounded overflow-hidden">
+              <img
+                src={attachment.url}
+                alt={attachment.name}
+                className="w-full h-full object-cover"
+              />
+              {/* Overlay for better button visibility */}
+              <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors" />
+            </div>
+          ) : (
+            <div className="h-20 bg-muted rounded flex items-center justify-center">
+              <IconComponent className="h-8 w-8 text-muted-foreground" />
+            </div>
+          )}
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          {FileUploadService.formatFileSize(attachment.size)}
-        </p>
+        {/* File info */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <p
+              className="text-sm font-medium truncate flex-1 text-gray-900"
+              title={attachment.name}
+            >
+              {attachment.name}
+            </p>
+            <StatusBadge status={attachment.status} />
+          </div>
+
+          <p className="text-xs text-gray-600 font-medium">
+            {FileUploadService.formatFileSize(attachment.size)}
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -412,30 +426,31 @@ function StatusBadge({
 }: {
   status: PendingAttachment["status"] | Attachment["status"];
 }) {
+  // 🔥 IMPROVED: Better contrast and visibility for status badges
   const config = {
     pending: {
       icon: null,
-      color: "bg-muted text-muted-foreground",
+      color: "bg-gray-200 text-gray-800 border border-gray-300",
       label: "Pending",
     },
     uploading: {
       icon: Loader2,
-      color: "bg-blue-100 text-blue-700",
+      color: "bg-blue-200 text-blue-900 border border-blue-300",
       label: "Uploading",
     },
     completed: {
       icon: CheckCircle,
-      color: "bg-green-100 text-green-700",
+      color: "bg-green-200 text-green-900 border border-green-300",
       label: "Ready",
     },
     ready: {
       icon: CheckCircle,
-      color: "bg-green-100 text-green-700",
+      color: "bg-green-200 text-green-900 border border-green-300",
       label: "Ready",
     },
     failed: {
       icon: AlertCircle,
-      color: "bg-red-100 text-red-700",
+      color: "bg-red-200 text-red-900 border border-red-300",
       label: "Failed",
     },
   };
@@ -443,7 +458,10 @@ function StatusBadge({
   const { icon: Icon, color, label } = config[status] || config.pending;
 
   return (
-    <Badge variant="secondary" className={cn("text-xs px-1.5 py-0.5", color)}>
+    <Badge
+      variant="secondary"
+      className={cn("text-xs px-2 py-1 font-semibold", color)}
+    >
       {Icon && (
         <Icon
           className={cn(
