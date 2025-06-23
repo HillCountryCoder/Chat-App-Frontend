@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { PendingAttachment, Attachment } from "@/types/attachment";
@@ -47,6 +48,7 @@ export default function AttachmentPreview({
     ...pendingFiles,
     ...uploadedAttachments.map((a) => ({
       id: a._id,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       file: null as any,
       preview: a.url,
       status: a.status,
@@ -283,6 +285,9 @@ function PendingFilePreview({
                   src={file.preview}
                   alt={file.file.name}
                   className="w-full h-full object-cover"
+                  decoding="async"
+                  loading="lazy"
+                  fetchPriority="low"
                 />
               ) : file.file.type.startsWith("video/") ? (
                 <video
@@ -379,6 +384,9 @@ function UploadedAttachmentPreview({
                 src={attachment.metadata.thumbnail.url}
                 alt={attachment.name}
                 className="w-full h-full object-cover"
+                decoding="async"
+                loading="lazy"
+                fetchPriority="low"
               />
               {/* Overlay for better button visibility */}
               <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors" />
@@ -389,6 +397,9 @@ function UploadedAttachmentPreview({
                 src={attachment.url}
                 alt={attachment.name}
                 className="w-full h-full object-cover"
+                decoding="async"
+                loading="lazy"
+                fetchPriority="low"
               />
               {/* Overlay for better button visibility */}
               <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors" />

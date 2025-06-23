@@ -284,6 +284,7 @@ export default function ChatWindow({
 
   const isLoading = messagesLoading || recipientLoading;
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const fileCounts = getFileCounts();
   const canSendMessage =
     (newMessage.trim() ||

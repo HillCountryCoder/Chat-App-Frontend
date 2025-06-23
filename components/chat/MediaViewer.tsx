@@ -244,6 +244,7 @@ export default function MediaViewer({
             )}
 
             {isImage && (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={attachment.url}
                 alt={attachment.name}
@@ -256,6 +257,9 @@ export default function MediaViewer({
                 }}
                 onLoad={() => setIsLoading(false)}
                 onError={() => setIsLoading(false)}
+                decoding="async"
+                loading="lazy"
+                fetchPriority="low"
               />
             )}
 
@@ -348,6 +352,7 @@ function TextFileViewer({
         setContent(text);
         onLoad();
       } catch (err) {
+        console.log("Error loading text file:", err);
         setError("Failed to load file content");
         onLoad();
       }

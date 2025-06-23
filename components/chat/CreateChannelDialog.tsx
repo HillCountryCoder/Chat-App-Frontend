@@ -80,12 +80,13 @@ export default function CreateChannelDialog({
       memberIds: [],
     },
   });
-  const handleSearch = useCallback(
-    debounce((value: string) => {
-      setSearchQuery(value);
-    }, 300),
-    [],
-  );
+  const handleSearch = useCallback((value: string) => {
+    const debouncedSearch = debounce((searchValue: string) => {
+      setSearchQuery(searchValue);
+    }, 300);
+    
+    debouncedSearch(value);
+  }, []);
 
   const onSubmit = async (data: CreateChannelFormData) => {
     try {

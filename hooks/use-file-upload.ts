@@ -34,11 +34,11 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
    * Update attachment status (for real-time status updates)
    */
   const updateAttachmentStatus = useCallback(
-    (attachmentId: string, status: Attachment["status"], metadata?: any) => {
+    (attachmentId: string, status: Attachment["status"], metadata?: Record<string, unknown>) => {
       setUploadedAttachments((prev) =>
         prev.map((attachment) =>
           attachment._id === attachmentId
-            ? { ...attachment, status, ...(metadata && { metadata }) }
+            ? { ...attachment, status, ...(metadata && { metadata: { ...attachment.metadata, ...metadata } }) }
             : attachment,
         ),
       );
