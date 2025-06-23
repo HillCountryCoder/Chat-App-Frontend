@@ -1,9 +1,29 @@
-// lib/attachment.service.ts
+// lib/attachment.service.ts (Updated with test failure support)
 import { api } from "./api";
 import { UploadUrlResponse, Attachment } from "@/types/attachment";
 import { FileUploadService } from "./file-upload.service";
+import { TEST_UPLOAD_FAILURE } from "@/utils/constants/debug";
 
 export class AttachmentService {
+  /**
+   * 🔧 NEW: Set test failure mode for debugging
+   */
+  private static testFailureMode: string | null = null;
+
+  /**
+   * 🔧 NEW: Enable test failure simulation
+   */
+  static setTestFailureMode(
+    mode: "network" | "timeout" | "server" | "random" | null,
+  ) {
+    this.testFailureMode = mode;
+    if (mode) {
+      console.log(`🔧 Test failure mode enabled: ${mode}`);
+    } else {
+      console.log(`🔧 Test failure mode disabled`);
+    }
+  }
+
   /**
    * Request upload URL from backend
    */
@@ -13,12 +33,32 @@ export class AttachmentService {
     fileSize: number,
     hasClientThumbnail: boolean = false,
   ): Promise<UploadUrlResponse> {
-    const { data } = await api.post("/attachments/upload-url", {
-      fileName,
-      fileType,
-      fileSize,
-      hasClientThumbnail,
-    });
+    // 🔧 NEW: Add test failure header if enabled
+    const headers: Record<string, string> = {};
+
+    if (this.testFailureMode) {
+      headers["x-test-failure"] = this.testFailureMode;
+    }
+
+    // 🔧 Alternative: Check localStorage for test mode
+    const localTestMode = localStorage.getItem(TEST_UPLOAD_FAILURE);
+    if (localTestMode) {
+      headers["x-test-failure"] = localTestMode;
+    }
+
+    const { data } = await api.post(
+      "/attachments/upload-url",
+      {
+        fileName,
+        fileType,
+        fileSize,
+        hasClientThumbnail,
+      },
+      {
+        headers, // 🔧 NEW: Pass test headers
+      },
+    );
+
     return data;
   }
 
@@ -160,6 +200,31 @@ export class AttachmentService {
     } catch (error) {
       console.error("File upload failed:", error);
       throw error;
+    }
+  }
+
+  /**
+   * 🔧 NEW: Test upload with specific failure type
+   */
+  static async uploadFileWithTestFailure(
+    file: File,
+    failureType: "network" | "timeout" | "server" | "random",
+    onProgress?: (progress: number) => void,
+  ): Promise<Attachment> {
+    // Temporarily set test failure mode
+    const originalMode = this.testFailureMode as
+      | "network"
+      | "timeout"
+      | "server"
+      | "random"
+      | null;
+    this.setTestFailureMode(failureType);
+
+    try {
+      return await this.uploadFile(file, onProgress);
+    } finally {
+      // Restore original mode
+      this.setTestFailureMode(originalMode);
     }
   }
 

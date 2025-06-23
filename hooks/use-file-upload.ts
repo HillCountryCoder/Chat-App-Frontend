@@ -330,13 +330,33 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
    * 🔥 NEW: Retry specific file
    */
   const retrySpecificFile = useCallback(
-    (fileId: string) => {
+    async (fileId: string) => {
+      const failedFile = pendingFiles.find(
+        (f) => f.id === fileId && f.status === "failed",
+      );
+
+      if (!failedFile) {
+        console.log("❌ Failed file not found");
+        return;
+      }
+
+      // Check if retryable
+      const isValidationError =
+        failedFile.error?.includes("suspicious") ||
+        failedFile.error?.includes("not allowed");
+
+      if (isValidationError) {
+        toast.warning("Cannot retry blocked file");
+        return;
+      }
+
+      // Set to uploading immediately
       setPendingFiles((prev) =>
         prev.map((f) =>
-          f.id === fileId && f.status === "failed"
+          f.id === fileId
             ? {
                 ...f,
-                status: "pending" as const,
+                status: "uploading" as const,
                 progress: 0,
                 error: undefined,
               }
@@ -344,10 +364,54 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         ),
       );
 
-      // Upload just this file
-      uploadFiles([fileId]);
+      try {
+        // Call AttachmentService.uploadFile directly
+        const attachment = await AttachmentService.uploadFile(
+          failedFile.file,
+          (progress) => {
+            setPendingFiles((prev) =>
+              prev.map((f) => (f.id === fileId ? { ...f, progress } : f)),
+            );
+          },
+        );
+
+        // Mark as completed and add to uploaded
+        setPendingFiles((prev) =>
+          prev.map((f) =>
+            f.id === fileId
+              ? { ...f, status: "completed" as const, progress: 100 }
+              : f,
+          ),
+        );
+
+        setUploadedAttachments((prev) => [...prev, attachment]);
+
+        // Remove from pending
+        setTimeout(() => {
+          setPendingFiles((prev) => prev.filter((f) => f.id !== fileId));
+        }, 100);
+
+        toast.success(`Successfully uploaded ${failedFile.file.name}`);
+      } catch (error) {
+        console.error("Retry failed:", error);
+
+        setPendingFiles((prev) =>
+          prev.map((f) =>
+            f.id === fileId
+              ? {
+                  ...f,
+                  status: "failed" as const,
+                  error:
+                    error instanceof Error ? error.message : "Upload failed",
+                }
+              : f,
+          ),
+        );
+
+        toast.error(`Retry failed: ${failedFile.file.name}`);
+      }
     },
-    [uploadFiles],
+    [pendingFiles, setUploadedAttachments],
   );
 
   /**
@@ -390,29 +454,50 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   /**
    * Retry failed uploads
    */
-  const retryFailedUploads = useCallback(() => {
-    const failedIds = pendingFiles
-      .filter((f) => f.status === "failed")
-      .map((f) => f.id);
+  const retryFailedUploads = useCallback(async () => {
+    const failedFiles = pendingFiles.filter((f) => f.status === "failed");
 
-    if (failedIds.length > 0) {
-      // Reset failed files to pending
-      setPendingFiles((prev) =>
-        prev.map((f) =>
-          failedIds.includes(f.id)
-            ? {
-                ...f,
-                status: "pending" as const,
-                progress: 0,
-                error: undefined,
-              }
-            : f,
-        ),
-      );
+    console.log("🔄 retryFailedUploads called", {
+      failedCount: failedFiles.length,
+    });
 
-      uploadFiles(failedIds);
+    if (failedFiles.length === 0) {
+      console.log("❌ No failed files to retry");
+      return;
     }
-  }, [pendingFiles, uploadFiles]);
+
+    // Filter out validation errors (non-retryable)
+    const retryableFiles = failedFiles.filter((f) => {
+      const isValidationError =
+        f.error?.includes("suspicious") ||
+        f.error?.includes("not allowed") ||
+        f.error?.includes("validation failed");
+      return !isValidationError;
+    });
+
+    if (retryableFiles.length === 0) {
+      toast.warning("No files can be retried", {
+        description: "All failed files were blocked by validation.",
+      });
+      return;
+    }
+
+    console.log(`🚀 Retrying ${retryableFiles.length} files`);
+
+    // Show progress toast
+    toast.info(`Retrying ${retryableFiles.length} file(s)...`);
+
+    // Use the working retrySpecificFile function for each file
+    for (const file of retryableFiles) {
+      try {
+        await retrySpecificFile(file.id);
+        // Add small delay between retries to avoid overwhelming the server
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      } catch (error) {
+        console.error(`Failed to retry ${file.file.name}:`, error);
+      }
+    }
+  }, [pendingFiles, retrySpecificFile]);
 
   /**
    * Get total file size

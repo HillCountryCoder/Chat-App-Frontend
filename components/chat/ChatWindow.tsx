@@ -284,7 +284,6 @@ export default function ChatWindow({
 
   const isLoading = messagesLoading || recipientLoading;
 
-  // 🔥 IMPROVED: Better send button state management
   const fileCounts = getFileCounts();
   const canSendMessage =
     (newMessage.trim() ||
