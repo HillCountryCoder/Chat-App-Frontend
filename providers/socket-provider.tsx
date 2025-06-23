@@ -111,7 +111,6 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       metadata?: any;
       error?: string;
     }) {
-      console.log("Attachment status update:", data);
       // This will be handled by individual components using useAttachmentStatusUpdates
     }
 

@@ -1,4 +1,3 @@
-// hooks/use-attachments.ts
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AttachmentService } from "@/lib/attachment.service";
 import { Attachment } from "@/types/attachment";
@@ -43,7 +42,8 @@ export function useDeleteAttachment() {
 }
 
 /**
- * Hook for listening to attachment status updates via Socket.IO
+ * ✅ UPDATED: Hook for listening to attachment status updates via Socket.IO
+ * Now primarily handles immediate "ready" status confirmations
  */
 export function useAttachmentStatusUpdates(attachmentIds: string[]) {
   const { socket } = useSocket();
@@ -77,20 +77,15 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
       !previousIds.every((id, index) => id === memoizedAttachmentIds[index]);
 
     if (!hasChanged) {
-      console.log("Attachment IDs unchanged, skipping re-subscription");
       return;
     }
 
-    console.log(
-      "Subscribing to attachment updates for IDs:",
-      memoizedAttachmentIds,
-    );
     previousIdsRef.current = [...memoizedAttachmentIds];
 
     // Subscribe and request current status for all attachments
     socket.emit("subscribe_attachment_updates", {
       attachmentIds: memoizedAttachmentIds,
-      requestCurrentStatus: true, // Add this flag to get current status
+      requestCurrentStatus: true,
     });
 
     const handleStatusUpdate = (data: {
@@ -99,7 +94,6 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
       metadata?: any;
       error?: string;
     }) => {
-      console.log("Received status update in socket:", data);
       setStatusUpdates((prev) => ({
         ...prev,
         [data.attachmentId]: {
@@ -109,8 +103,11 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
         },
       }));
 
+      // ✅ UPDATED: Since files are immediately ready, we expect "ready" status
       if (data.status === "ready") {
-        toast.success("File processed successfully");
+        toast.success("File ready", {
+          description: "File uploaded successfully",
+        });
       } else if (data.status === "failed") {
         toast.error("File processing failed", {
           description: data.error || "Unknown error",
@@ -126,7 +123,6 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
         metadata?: any;
       }>;
     }) => {
-      console.log("Received initial status for attachments:", data);
       const initialUpdates: Record<string, any> = {};
 
       data.attachmentStatuses.forEach(({ attachmentId, status, metadata }) => {
@@ -136,13 +132,13 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
       setStatusUpdates((prev) => ({ ...prev, ...initialUpdates }));
     };
 
+    // ✅ UPDATED: Processing complete handler - files should be immediately ready
     const handleProcessingComplete = (data: {
       attachmentId: string;
       status: Attachment["status"];
       fileName: string;
+      ready?: boolean;
     }) => {
-      console.log("Processing complete in socket:", data);
-
       // Update status updates state
       setStatusUpdates((prev) => ({
         ...prev,
@@ -153,13 +149,16 @@ export function useAttachmentStatusUpdates(attachmentIds: string[]) {
         },
       }));
 
+      // Since files are now immediately ready, this should always be "ready"
       if (data.status === "ready") {
-        toast.success(`${data.fileName} is ready`);
+        toast.success(`${data.fileName} is ready`, {
+          description: "File uploaded and available for use",
+        });
       }
     };
 
     socket.on("attachment_status_update", handleStatusUpdate);
-    socket.on("attachment_initial_status", handleInitialStatus); // New event
+    socket.on("attachment_initial_status", handleInitialStatus);
     socket.on("attachment_processing_complete", handleProcessingComplete);
 
     return () => {

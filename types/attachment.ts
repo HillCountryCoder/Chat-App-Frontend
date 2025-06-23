@@ -1,4 +1,8 @@
-import { MAX_ATTACHMENTS_PER_MESSAGE, MAX_FILE_SIZE, MAX_TOTAL_MESSAGE_SIZE } from "@/utils/constants/file";
+import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  MAX_FILE_SIZE,
+  MAX_TOTAL_MESSAGE_SIZE,
+} from "@/utils/constants/file";
 
 export interface S3Metadata {
   bucket: string;
@@ -40,7 +44,7 @@ export interface Attachment {
   compressedSize?: number;
   uploadedBy: string;
   uploadedAt: string;
-  status: "uploading" | "processing" | "ready" | "failed";
+  status: "uploading" | "ready" | "failed";
   metadata: AttachmentMetadata;
 }
 
@@ -65,7 +69,7 @@ export interface FileUploadProgress {
   uploadId: string;
   fileName: string;
   progress: number;
-  status: "pending" | "uploading" | "processing" | "completed" | "failed";
+  status: "pending" | "uploading" | "completed" | "failed";
   error?: string;
 }
 
@@ -75,7 +79,7 @@ export interface PendingAttachment {
   preview?: string;
   thumbnail?: Blob;
   progress: number;
-  status: "pending" | "uploading" | "processing" | "completed" | "failed";
+  status: "pending" | "uploading" | "completed" | "failed";
   error?: string;
   uploadId?: string;
   cdnUrl?: string;
@@ -144,15 +148,12 @@ export const FILE_CONSTRAINTS: FileConstraints = {
 
 export const SUPPORTED_IMAGE_TYPES = [
   "image/jpeg",
-  "image/png", 
+  "image/png",
   "image/gif",
-  "image/webp"
+  "image/webp",
 ];
 
-export const SUPPORTED_VIDEO_TYPES = [
-  "video/mp4",
-  "video/webm"
-];
+export const SUPPORTED_VIDEO_TYPES = ["video/mp4", "video/webm"];
 
 export const THUMBNAIL_CONFIG = {
   maxWidth: 320,

@@ -147,16 +147,19 @@ export default function ChatMessage({
   const hasTextContent = message.content && message.content.trim() !== "📎";
   const hasAttachments = message.attachments && message.attachments.length > 0;
 
+  const readyAttachments =
+    message.attachments?.filter(
+      (attachment) => attachment.status === "ready",
+    ) || [];
+
   // Check if it's media-only message (images/videos only)
-  const isMediaOnlyMessage = hasAttachments && !hasTextContent;
-  const mediaAttachments =
-    message.attachments?.filter(
-      (a) => a.type.startsWith("image/") || a.type.startsWith("video/"),
-    ) || [];
-  const documentAttachments =
-    message.attachments?.filter(
-      (a) => !a.type.startsWith("image/") && !a.type.startsWith("video/"),
-    ) || [];
+  const isMediaOnlyMessage = readyAttachments.length > 0 && !hasTextContent;
+  const mediaAttachments = readyAttachments.filter(
+    (a) => a.type.startsWith("image/") || a.type.startsWith("video/"),
+  );
+  const documentAttachments = readyAttachments.filter(
+    (a) => !a.type.startsWith("image/") && !a.type.startsWith("video/"),
+  );
 
   const handlePreviewAttachment = (
     attachment: Attachment,
@@ -244,7 +247,6 @@ export default function ChatMessage({
                 isMediaOnlyMessage ? "p-0" : "p-1",
               )}
             >
-              {/* Media attachments (at the top or standalone) */}
               {mediaAttachments.length > 0 && (
                 <div
                   className={cn(
@@ -268,7 +270,7 @@ export default function ChatMessage({
 
               {/* Text content */}
               {hasTextContent && (
-                <div className={cn(isMediaOnlyMessage ? "p-4 pt-2" : "pl-2 pb-2")}>
+                <div className={cn(isMediaOnlyMessage ? "p-4 pt-2" : "p-2")}>
                   <p>{message.content}</p>
                 </div>
               )}
@@ -287,7 +289,6 @@ export default function ChatMessage({
               )}
             </div>
 
-            {/* Document attachments (always separate) */}
             {documentAttachments.length > 0 && (
               <div
                 className={cn("max-w-md", isOwnMessage && "flex justify-end")}
@@ -301,6 +302,20 @@ export default function ChatMessage({
                 />
               </div>
             )}
+
+            {hasAttachments &&
+              message.attachments?.some((a) => a.status !== "ready") && (
+                <div className="text-xs text-muted-foreground italic">
+                  {message.attachments?.filter((a) => a.status === "uploading")
+                    .length > 0 && <span>Uploading files...</span>}
+                  {message.attachments?.filter((a) => a.status === "failed")
+                    .length > 0 && (
+                    <span className="text-red-500">
+                      Some files failed to upload
+                    </span>
+                  )}
+                </div>
+              )}
           </div>
 
           {/* Message Actions */}

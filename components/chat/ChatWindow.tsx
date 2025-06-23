@@ -113,19 +113,10 @@ export default function ChatWindow({
 
       // Only update if the status has actually changed
       if (currentAttachment && currentAttachment.status !== update.status) {
-        console.log(
-          `Updating attachment ${attachmentId} status from ${currentAttachment.status} to ${update.status}`,
-        );
         updateAttachmentStatus(attachmentId, update.status, update.metadata);
       }
     });
   }, [statusUpdates, uploadedAttachments, updateAttachmentStatus]);
-
-  useEffect(() => {
-    if (Object.keys(statusUpdates).length > 0) {
-      console.log("Attachment status updates:", statusUpdates);
-    }
-  }, [statusUpdates]);
 
   useEffect(() => {
     if (!socket || !directMessageId) return;
@@ -138,13 +129,6 @@ export default function ChatWindow({
       socket.emit("leave_direct_message", { directMessageId });
     };
   }, [socket, directMessageId]);
-
-  //   // Mark messages as read when entering the chat
-  //   useEffect(() => {
-  //     if (directMessageId) {
-  //       markDirectMessageAsRead.mutate(directMessageId);
-  //     }
-  //   }, [directMessageId, markDirectMessageAsRead]);
 
   // Initialize message reactions
   useEffect(() => {
@@ -190,8 +174,6 @@ export default function ChatWindow({
       messageId: string;
       reactions: Reaction[];
     }) => {
-      console.log("Received reaction update in ChatWindow", data);
-
       // Update local state
       setMessageReactions((prev) => {
         const newState = { ...prev };
@@ -217,8 +199,7 @@ export default function ChatWindow({
 
     if (!newMessage.trim() && getAttachmentIds().length === 0) return;
 
-    // Ensure all files are uploaded before sending
-    if (!isReadyToSend) return;
+    if (!isReadyToSend()) return;
 
     sendMessageMutation.mutate(
       {
@@ -531,7 +512,7 @@ export default function ChatWindow({
       {/* Media Viewer */}
       <MediaViewer
         attachment={currentAttachment}
-        attachments={previewAttachments} // Use the message attachments instead
+        attachments={previewAttachments}
         isOpen={isViewerOpen}
         onClose={() => {
           closePreview();

@@ -86,7 +86,6 @@ export default function FileUploadDropzone({
 
   const openFileDialog = useCallback(() => {
     if (disabled) return;
-    console.log("Opening file dialog");
     const input = document.createElement("input");
     input.type = "file";
     input.multiple = true;

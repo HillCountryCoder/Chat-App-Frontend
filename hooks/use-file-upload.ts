@@ -1,4 +1,3 @@
-// hooks/use-file-upload.ts (Fixed)
 import { useState, useCallback, useRef } from "react";
 import { AttachmentService } from "@/lib/attachment.service";
 import { FileUploadService } from "@/lib/file-upload.service";
@@ -70,7 +69,6 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       }
 
       if (filesToUpload.length === 0) {
-        console.log("No files to upload");
         return;
       }
 
@@ -105,7 +103,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
               },
             );
 
-            // Update status to completed
+            // No need to wait for processing
             setPendingFiles((prev) =>
               prev.map((f) =>
                 f.id === pendingFile.id
@@ -147,7 +145,10 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         );
 
         onSuccess?.(attachments);
-        toast.success(`Successfully uploaded ${attachments.length} file(s)`);
+
+        toast.success(`Successfully uploaded ${attachments.length} file(s)`, {
+          description: "Files are ready to use",
+        });
       } catch (error) {
         console.error("Upload failed:", error);
         const errorMessage =
@@ -233,15 +234,8 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       // Update state first
       setPendingFiles((prev) => [...prev, ...newPendingFiles]);
 
-      console.log(
-        `Added ${newPendingFiles.length} new pending files. Total will be: ${
-          pendingFiles.length + newPendingFiles.length
-        }`,
-      );
-
       // Auto-upload if enabled - pass the new files directly
       if (autoUpload) {
-        console.log("Auto-upload enabled, starting upload with new files");
         // Pass the new files directly instead of relying on state
         uploadFiles(undefined, newPendingFiles);
       }
@@ -363,7 +357,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   }, [pendingFiles.length, uploadedAttachments.length]);
 
   /**
-   * Check if ready to send (all files uploaded)
+   * Files are ready immediately after upload completion
    */
   const isReadyToSend = useCallback(() => {
     return (
@@ -394,7 +388,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     cancelUploads,
     clearAll,
     retryFailedUploads,
-    updateAttachmentStatus, // NEW: Add this function
+    updateAttachmentStatus,
 
     // Computed
     getTotalSize,
