@@ -1,6 +1,15 @@
 // types/chat.ts
+import { Value } from "platejs";
 import { Attachment } from "./attachment";
 import { User } from "./user";
+
+export type ContentType =
+  | "text"
+  | "rich"
+  | "image"
+  | "file"
+  | "code"
+  | "system";
 export interface Reaction {
   emoji: string;
   count: number;
@@ -13,7 +22,6 @@ export interface Message {
   channelId?: string;
   directMessageId?: string;
   content: string;
-  contentType: string;
   createdAt: string;
   isEdited: boolean;
   reactions: Reaction[];
@@ -21,6 +29,8 @@ export interface Message {
   replyTo?: {
     _id: string;
     content: string;
+    richContent?: Value;
+    contentType?: ContentType;
     senderId: {
       _id: string;
       displayName: string;
@@ -33,6 +43,8 @@ export interface Message {
     displayName: string;
     avatarUrl?: string;
   };
+  richContent?: Value; // Add this for rich text content
+  contentType?: ContentType;
   attachments: Attachment[];
   hasMedia: boolean;
   totalAttachmentSize?: number;
