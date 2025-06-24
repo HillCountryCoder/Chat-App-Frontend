@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useMessages, useSendMessage, useRecipient } from "@/hooks/use-chat";
 import { useSocket } from "@/providers/socket-provider";
@@ -34,16 +35,10 @@ import { Attachment } from "@/types/attachment";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import RichTextEditor from "./RichTextEditor";
-import RichTextRenderer, { InlineRichTextRenderer } from "./RichTextRenderer";
+import { InlineRichTextRenderer } from "./RichTextRenderer";
 import { ContentType } from "@/types/chat";
 import type { Value } from "platejs";
-import {
-  hasContent,
-  valueToText,
-  textToValue,
-  initialEditorValue,
-  isRichTextContent,
-} from "@/utils/rich-text";
+import { hasContent, valueToText, initialEditorValue } from "@/utils/rich-text";
 interface ChatWindowProps {
   directMessageId: string;
   recipientId?: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { Value } from "platejs";
 import {
   BoldPlugin,
@@ -13,7 +13,6 @@ import { BlockquotePlugin } from "@platejs/basic-nodes/react";
 import { Plate, usePlateEditor } from "platejs/react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import {
   Bold,
   Italic,
@@ -21,8 +20,6 @@ import {
   Strikethrough,
   Code,
   Quote,
-  Send,
-  Loader2,
 } from "lucide-react";
 import {
   Tooltip,
@@ -129,7 +126,11 @@ export function RichTextEditor({
     setEditorValue(initialValue);
     onChange?.(initialValue);
   }, [onChange]);
-
+  useEffect(() => {
+    if (value !== editorValue) {
+      setEditorValue(value);
+    }
+  }, [value]);
   return (
     <div className={cn("relative", className)}>
       <Plate editor={editor} onChange={handleValueChange}>
@@ -224,44 +225,26 @@ export function RichTextEditor({
           )}
 
           <EditorContainer>
-            <div className="relative">
-              <Editor
-                variant={"fullWidth"}
-                placeholder={placeholder}
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
-                onKeyDown={handleKeyDown}
-                readOnly={disabled}
-                autoFocus={autoFocus}
-                style={{
-                  minHeight: `${minHeight}px`,
-                  maxHeight: `${maxHeight}px`,
-                  overflowY: "auto",
-                }}
-                className={cn(
-                  "px-3 py-2 text-sm leading-relaxed",
-                  "focus:outline-none",
-                  "placeholder:text-muted-foreground",
-                  disabled && "opacity-50 cursor-not-allowed",
-                )}
-              />
-
-              {/* Submit button */}
-              <div className="absolute bottom-2 right-2">
-                <Button
-                  size="sm"
-                  onClick={handleSubmit}
-                  disabled={!hasContent || disabled || loading}
-                  className="h-8 w-8 p-0"
-                >
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            </div>
+            <Editor
+              variant={"fullWidth"}
+              placeholder={placeholder}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              onKeyDown={handleKeyDown}
+              readOnly={disabled}
+              autoFocus={autoFocus}
+              style={{
+                minHeight: `${minHeight}px`,
+                maxHeight: `${maxHeight}px`,
+                overflowY: "auto",
+              }}
+              className={cn(
+                "px-3 py-2 text-sm leading-relaxed",
+                "focus:outline-none",
+                "placeholder:text-muted-foreground",
+                disabled && "opacity-50 cursor-not-allowed",
+              )}
+            />
           </EditorContainer>
         </div>
       </Plate>
