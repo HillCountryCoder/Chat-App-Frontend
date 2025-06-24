@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useMessages, useSendMessage, useRecipient } from "@/hooks/use-chat";
 import { useSocket } from "@/providers/socket-provider";
-import { Message, Reaction } from "@/types/chat";
+import { ContentTypeEnum, Message, Reaction } from "@/types/chat";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import {
   X,
   Upload,
   AlertTriangle,
+  Type,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "../ui/skeleton";
@@ -32,7 +33,17 @@ import {
 import { Attachment } from "@/types/attachment";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-
+import RichTextEditor from "./RichTextEditor";
+import RichTextRenderer, { InlineRichTextRenderer } from "./RichTextRenderer";
+import { ContentType } from "@/types/chat";
+import type { Value } from "platejs";
+import {
+  hasContent,
+  valueToText,
+  textToValue,
+  initialEditorValue,
+  isRichTextContent,
+} from "@/utils/rich-text";
 interface ChatWindowProps {
   directMessageId: string;
   recipientId?: string;
@@ -55,7 +66,47 @@ export default function ChatWindow({
   const [previewAttachments, setPreviewAttachments] = useState<Attachment[]>(
     [],
   );
+  const [isRichTextMode, setIsRichTextMode] = useState(false);
+  const [richContent, setRichContent] = useState<any[]>([
+    {
+      type: "paragraph",
+      children: [{ text: "" }],
+    },
+  ]);
 
+  const extractPlainTextFromRichContent = (richContent: any[]): string => {
+    const extractText = (nodes: any[]): string => {
+      return nodes
+        .map((node) => {
+          if (node.text !== undefined) {
+            return node.text;
+          }
+          if (node.children) {
+            return extractText(node.children);
+          }
+          return "";
+        })
+        .join("");
+    };
+
+    return extractText(richContent).trim();
+  };
+
+  const toggleRichTextMode = () => {
+    if (isRichTextMode) {
+      const plainText = extractPlainTextFromRichContent(richContent);
+      setNewMessage(plainText);
+      setIsRichTextMode(false);
+    } else {
+      setRichContent([
+        {
+          type: "paragraph",
+          children: [{ text: newMessage }],
+        },
+      ]);
+      setIsRichTextMode(true);
+    }
+  };
   const {
     data: messages = [],
     isLoading: messagesLoading,
@@ -207,20 +258,49 @@ export default function ChatWindow({
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!newMessage.trim() && getAttachmentIds().length === 0) return;
+    // Determine content and type based on mode
+    let content: string;
+    let contentType: ContentType;
+    let richContentData: Value | undefined;
 
+    if (isRichTextMode) {
+      content = valueToText(richContent);
+      contentType = ContentTypeEnum.RICH;
+      richContentData = richContent;
+
+      // Check if rich content actually has content
+      if (!hasContent(richContent) && getAttachmentIds().length === 0) return;
+    } else {
+      content = newMessage.trim();
+      contentType = ContentTypeEnum.TEXT;
+
+      // Check if plain text has content
+      if (!content && getAttachmentIds().length === 0) return;
+    }
+
+    // Check if ready to send
     if (!isReadyToSend()) return;
+
+    console.log("Sending message:", {
+      content,
+      contentType,
+      hasRichContent: !!richContentData,
+    });
 
     sendMessageMutation.mutate(
       {
-        content: newMessage.trim() || "📎",
+        content: content || "📎",
         directMessageId,
         replyToId: replyingTo?._id,
         attachmentIds: getAttachmentIds(),
+        contentType,
+        richContent: richContentData,
       },
       {
         onSuccess: () => {
+          // Clear both input types
           setNewMessage("");
+          setRichContent(initialEditorValue);
           setReplyingTo(null);
           clearAll();
         },
@@ -429,7 +509,6 @@ export default function ChatWindow({
 
       {/* Input Section */}
       <div className="border-t border-border">
-        {/* 🔥 IMPROVED: Failed Files Warning */}
         {hasFailedUploads && hasOnlyFailedFiles && (
           <div className="p-4 pb-0">
             <Alert variant="destructive">
@@ -477,9 +556,17 @@ export default function ChatWindow({
                         : replyingTo.sender?.displayName || "Unknown"}
                     </span>
                   </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {replyingTo.content}
-                  </p>
+                  <div className="text-sm text-muted-foreground line-clamp-2">
+                    {replyingTo.contentType === ContentTypeEnum.RICH &&
+                    replyingTo.richContent ? (
+                      <InlineRichTextRenderer
+                        content={replyingTo.richContent}
+                        maxLength={80}
+                      />
+                    ) : (
+                      replyingTo.content
+                    )}
+                  </div>
                 </div>
               </div>
               <Button
@@ -507,18 +594,51 @@ export default function ChatWindow({
             >
               <Paperclip size={18} />
             </Button>
-            <Input
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Type a message..."
-              className="flex-1"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage(e);
-                }
-              }}
-            />
+
+            <Button
+              type="button"
+              size="icon"
+              variant={isRichTextMode ? "default" : "ghost"}
+              onClick={toggleRichTextMode}
+              title={
+                isRichTextMode ? "Switch to plain text" : "Switch to rich text"
+              }
+            >
+              <Type size={18} />
+            </Button>
+
+            {isRichTextMode ? (
+              <div className="flex-1">
+                <RichTextEditor
+                  value={richContent}
+                  onChange={setRichContent}
+                  placeholder="Type a message..."
+                  onSubmit={() => {
+                    const form = new Event("submit", {
+                      bubbles: true,
+                      cancelable: true,
+                    });
+                    const formElement = document.querySelector("form");
+                    if (formElement) {
+                      formElement.dispatchEvent(form);
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              <Input
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Type a message..."
+                className="flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage(e);
+                  }
+                }}
+              />
+            )}
             <Button
               type="submit"
               size="icon"

@@ -239,7 +239,7 @@ export function RichTextEditor({
                   overflowY: "auto",
                 }}
                 className={cn(
-                  "p-3 text-sm leading-relaxed",
+                  "px-3 py-2 text-sm leading-relaxed",
                   "focus:outline-none",
                   "placeholder:text-muted-foreground",
                   disabled && "opacity-50 cursor-not-allowed",

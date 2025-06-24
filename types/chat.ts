@@ -10,6 +10,14 @@ export type ContentType =
   | "file"
   | "code"
   | "system";
+export enum ContentTypeEnum {
+  TEXT = "text",
+  RICH = "rich",
+  IMAGE = "image",
+  FILE = "file",
+  CODE = "code",
+  SYSTEM = "system",
+}
 export interface Reaction {
   emoji: string;
   count: number;

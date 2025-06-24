@@ -91,7 +91,11 @@ export function RichTextRenderer({
     <div className={cn("rich-text-content", compact && "text-sm", className)}>
       <Plate editor={editor} readOnly>
         <EditorContainer>
-          <Editor className="p-0 focus:outline-none" readOnly />
+          <Editor
+            variant={"select"}
+            className="focus:outline-none [&_.slate-editor]:p-0"
+            readOnly
+          />
         </EditorContainer>
       </Plate>
     </div>
