@@ -20,12 +20,14 @@ interface Reaction {
 interface MessageReactionsProps {
   messageId: string;
   reactions: Reaction[];
+  isOwnMessage?: boolean;
   onReactionChange?: (messageId: string, reactions: Reaction[]) => void;
 }
 
 function MessageReactions({
   messageId,
   reactions = [],
+  isOwnMessage = false,
   onReactionChange,
 }: MessageReactionsProps) {
   const { socket } = useSocket();

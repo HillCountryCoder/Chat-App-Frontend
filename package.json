@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+	"setup-rich-text": "npx shadcn@latest add https://platejs.org/r/plate-ui && npx shadcn@latest add https://platejs.org/r/editor && npx shadcn@latest add https://platejs.org/r/fixed-toolbar && npx shadcn@latest add https://platejs.org/r/mark-toolbar-button && npx shadcn@latest add https://platejs.org/r/toolbar"
   },
   "dependencies": {
     "@hookform/resolvers": "^4.1.3",

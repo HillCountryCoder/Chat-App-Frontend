@@ -371,6 +371,7 @@ export default function ChatMessage({
             messageId={message._id}
             reactions={localReactions}
             onReactionChange={handleReactionsChange}
+            isOwnMessage={isOwnMessage}
           />
         )}
       </div>

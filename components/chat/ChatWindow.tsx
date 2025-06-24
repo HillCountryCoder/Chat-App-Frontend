@@ -67,7 +67,6 @@ export default function ChatWindow({
 
   const sendMessageMutation = useSendMessage();
 
-  // 🔥 IMPROVED: File upload hook with better error handling
   const {
     pendingFiles,
     uploadedAttachments,
@@ -194,7 +193,12 @@ export default function ChatWindow({
       socket.off("message_reaction_updated", handleReactionUpdate);
     };
   }, [socket]);
-
+  // Mark messages as read when entering the chat
+  useEffect(() => {
+    if (directMessageId) {
+      markDirectMessageAsRead.mutate(directMessageId);
+    }
+  }, [directMessageId, markDirectMessageAsRead]);
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -205,7 +209,6 @@ export default function ChatWindow({
 
     if (!newMessage.trim() && getAttachmentIds().length === 0) return;
 
-    // 🔥 IMPROVED: Can send even with failed files (they'll be excluded)
     if (!isReadyToSend()) return;
 
     sendMessageMutation.mutate(
