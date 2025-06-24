@@ -5,6 +5,13 @@ import { useSocket } from "@/providers/socket-provider";
 import { DirectMessage, Message } from "@/types/chat";
 import { User } from "@/types/user";
 import { useAuthStore } from "@/store/auth-store";
+import type { Value } from "platejs";
+
+// Enhanced Message interface with rich content support
+export interface RichMessage extends Message {
+  richContent?: Value;
+  contentType?: "text" | "rich" | "image" | "file" | "code" | "system";
+}
 
 export function useMessages(channelId?: string, directMessageId?: string) {
   const endpoint = directMessageId
@@ -20,7 +27,7 @@ export function useMessages(channelId?: string, directMessageId?: string) {
     queryFn: async () => {
       if (!endpoint) return [];
       const { data } = await api.get(endpoint);
-      return data as Message[];
+      return data as RichMessage[];
     },
     enabled: !!endpoint,
   });
@@ -33,17 +40,33 @@ export function useSendMessage() {
   return useMutation({
     mutationFn: async (message: {
       content: string;
+      richContent?: Value;
+      contentType?: "text" | "rich" | "image" | "file" | "code" | "system";
       channelId?: string;
       directMessageId?: string;
       receiverId?: string;
       replyToId?: string;
       attachmentIds?: string[];
     }) => {
+      console.log("Sending message:", {
+        hasRichContent: !!message.richContent,
+        contentType: message.contentType,
+        contentLength: message.content.length,
+      });
+
       // If socket is connected, emit message through socket
       if (socket?.connected) {
         return new Promise((resolve, reject) => {
+          const messageData = {
+            ...message,
+            // Ensure content type is set appropriately
+            contentType: message.richContent
+              ? "rich"
+              : message.contentType || "text",
+          };
+
           if (message.directMessageId || message.receiverId) {
-            socket.emit("send_direct_message", message, (response: any) => {
+            socket.emit("send_direct_message", messageData, (response: any) => {
               if (response.success) {
                 resolve(response);
               } else {
@@ -51,13 +74,19 @@ export function useSendMessage() {
               }
             });
           } else if (message.channelId) {
-            socket.emit("send_channel_message", message, (response: any) => {
-              if (response.success) {
-                resolve(response);
-              } else {
-                reject(new Error(response.error || "Failed to send message"));
-              }
-            });
+            socket.emit(
+              "send_channel_message",
+              messageData,
+              (response: any) => {
+                if (response.success) {
+                  resolve(response);
+                } else {
+                  reject(new Error(response.error || "Failed to send message"));
+                }
+              },
+            );
+          } else {
+            reject(new Error("No target specified for message"));
           }
         });
       }
@@ -67,11 +96,24 @@ export function useSendMessage() {
           message.directMessageId || message.receiverId
             ? "/direct-messages/messages"
             : "/messages";
-        const { data } = await api.post(endpoint, message);
+
+        const messageData = {
+          ...message,
+          contentType: message.richContent
+            ? "rich"
+            : message.contentType || "text",
+        };
+
+        const { data } = await api.post(endpoint, messageData);
         return data;
       }
     },
     onSuccess: (data: any, variables) => {
+      console.log("Message sent successfully:", {
+        messageId: data.message?.messageId,
+        contentType: variables.contentType,
+      });
+
       if (variables.directMessageId) {
         queryClient.invalidateQueries({
           queryKey: ["messages", "direct", variables.directMessageId],
@@ -86,6 +128,13 @@ export function useSendMessage() {
       if (variables.receiverId) {
         queryClient.invalidateQueries({ queryKey: ["direct-messages"] });
       }
+    },
+    onError: (error, variables) => {
+      console.error("Failed to send message:", {
+        error,
+        contentType: variables.contentType,
+        hasRichContent: !!variables.richContent,
+      });
     },
   });
 }
@@ -132,6 +181,67 @@ export function useUsers(searchQuery: string = "") {
       const params = searchQuery ? { search: searchQuery } : undefined;
       const { data } = await api.get("/users", { params });
       return data.users;
+    },
+  });
+}
+
+// New hook for rich content statistics
+export function useRichContentStats(
+  directMessageId?: string,
+  channelId?: string,
+) {
+  const endpoint = directMessageId
+    ? `/direct-messages/${directMessageId}/stats/rich-content`
+    : channelId
+    ? `/channels/${channelId}/stats/rich-content`
+    : null;
+
+  return useQuery({
+    queryKey: directMessageId
+      ? ["rich-content-stats", "direct", directMessageId]
+      : ["rich-content-stats", "channel", channelId],
+    queryFn: async () => {
+      if (!endpoint) return null;
+      const { data } = await api.get(endpoint);
+      return data;
+    },
+    enabled: !!endpoint,
+  });
+}
+
+// Hook for message editing (for future implementation)
+export function useEditMessage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      messageId,
+      content,
+      richContent,
+      contentType,
+    }: {
+      messageId: string;
+      content: string;
+      richContent?: Value;
+      contentType?: string;
+    }) => {
+      const { data } = await api.put(`/messages/${messageId}`, {
+        content,
+        richContent,
+        contentType: richContent ? "rich" : contentType || "text",
+      });
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      // Invalidate relevant message queries
+      queryClient.invalidateQueries({
+        queryKey: ["messages"],
+      });
+
+      console.log("Message edited successfully:", {
+        messageId: variables.messageId,
+        hasRichContent: !!variables.richContent,
+      });
     },
   });
 }

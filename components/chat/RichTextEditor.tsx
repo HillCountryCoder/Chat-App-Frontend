@@ -132,22 +132,21 @@ export function RichTextEditor({
 
   return (
     <div className={cn("relative", className)}>
-      <Plate
-        editor={editor}
-        onChange={handleValueChange}
-      >
-        <div className={cn(
-          "border rounded-lg bg-background transition-colors",
-          isFocused && "ring-2 ring-ring ring-offset-2",
-          disabled && "opacity-50"
-        )}>
+      <Plate editor={editor} onChange={handleValueChange}>
+        <div
+          className={cn(
+            "border rounded-lg bg-background transition-colors",
+            isFocused && "ring-2 ring-ring ring-offset-2",
+            disabled && "opacity-50",
+          )}
+        >
           {showToolbar && (
             <FixedToolbar className="flex justify-start gap-1 p-2 border-b bg-muted/30">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <MarkToolbarButton 
-                      nodeType="bold" 
+                    <MarkToolbarButton
+                      nodeType="bold"
                       tooltip="Bold (⌘+B)"
                       disabled={disabled}
                     >
@@ -159,8 +158,8 @@ export function RichTextEditor({
 
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <MarkToolbarButton 
-                      nodeType="italic" 
+                    <MarkToolbarButton
+                      nodeType="italic"
                       tooltip="Italic (⌘+I)"
                       disabled={disabled}
                     >
@@ -172,8 +171,8 @@ export function RichTextEditor({
 
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <MarkToolbarButton 
-                      nodeType="underline" 
+                    <MarkToolbarButton
+                      nodeType="underline"
                       tooltip="Underline (⌘+U)"
                       disabled={disabled}
                     >
@@ -185,8 +184,8 @@ export function RichTextEditor({
 
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <MarkToolbarButton 
-                      nodeType="strikethrough" 
+                    <MarkToolbarButton
+                      nodeType="strikethrough"
                       tooltip="Strikethrough"
                       disabled={disabled}
                     >
@@ -198,8 +197,8 @@ export function RichTextEditor({
 
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <MarkToolbarButton 
-                      nodeType="code" 
+                    <MarkToolbarButton
+                      nodeType="code"
                       tooltip="Inline Code"
                       disabled={disabled}
                     >
@@ -211,7 +210,7 @@ export function RichTextEditor({
 
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <ToolbarButton 
+                    <ToolbarButton
                       onClick={() => editor.tf.blockquote.toggle()}
                       disabled={disabled}
                     >
@@ -223,10 +222,11 @@ export function RichTextEditor({
               </TooltipProvider>
             </FixedToolbar>
           )}
-          
+
           <EditorContainer>
             <div className="relative">
               <Editor
+                variant={"fullWidth"}
                 placeholder={placeholder}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
@@ -236,16 +236,16 @@ export function RichTextEditor({
                 style={{
                   minHeight: `${minHeight}px`,
                   maxHeight: `${maxHeight}px`,
-                  overflowY: 'auto',
+                  overflowY: "auto",
                 }}
                 className={cn(
                   "p-3 text-sm leading-relaxed",
                   "focus:outline-none",
                   "placeholder:text-muted-foreground",
-                  disabled && "opacity-50 cursor-not-allowed"
+                  disabled && "opacity-50 cursor-not-allowed",
                 )}
               />
-              
+
               {/* Submit button */}
               <div className="absolute bottom-2 right-2">
                 <Button

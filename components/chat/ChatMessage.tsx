@@ -4,19 +4,24 @@ import { Attachment } from "@/types/attachment";
 import { useAuthStore } from "@/store/auth-store";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { Check, MoreVertical, Reply, SmilePlus } from "lucide-react";
+import { Check, MoreVertical, Reply, SmilePlus, Type } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { User } from "@/types/user";
 import MessageReactions from "./MessageReactions";
 import MessageReactionMenu from "./MessageReactionMenu";
 import AttachmentDisplay from "./AttachmentDisplay";
+import RichTextRenderer from "./RichTextRenderer";
 import { useSocket } from "@/providers/socket-provider";
 import { Button } from "../ui/button";
 import { useReaction } from "@/hooks/use-reaction";
+import type { Value } from "platejs";
 
 interface ChatMessageProps {
-  message: Message;
+  message: Message & {
+    richContent?: Value;
+    contentType?: "text" | "rich" | "image" | "file" | "code" | "system";
+  };
   recipient?: User;
   onReply?: (message: Message) => void;
   onPreviewAttachment?: (
@@ -145,6 +150,7 @@ export default function ChatMessage({
 
   // Check if message has content or attachments
   const hasTextContent = message.content && message.content.trim() !== "📎";
+  const hasRichContent = message.contentType === "rich" && message.richContent;
   const hasAttachments = message.attachments && message.attachments.length > 0;
 
   const readyAttachments =
@@ -153,7 +159,8 @@ export default function ChatMessage({
     ) || [];
 
   // Check if it's media-only message (images/videos only)
-  const isMediaOnlyMessage = readyAttachments.length > 0 && !hasTextContent;
+  const isMediaOnlyMessage =
+    readyAttachments.length > 0 && !hasTextContent && !hasRichContent;
   const mediaAttachments = readyAttachments.filter(
     (a) => a.type.startsWith("image/") || a.type.startsWith("video/"),
   );
@@ -218,12 +225,22 @@ export default function ChatMessage({
                 <div className="flex items-center gap-1 mb-0.5">
                   <Reply className="h-3 w-3 text-muted-foreground" />
                   <span className="text-xs font-medium text-primary">
-                    {message.replyTo.senderId.displayName || "Unknown"}
+                    {message.replyTo.senderId?.displayName || "Unknown"}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground line-clamp-2">
-                  {message.replyTo.content}
-                </p>
+                <div className="text-xs text-muted-foreground line-clamp-2">
+                  {/* Handle rich content in reply preview */}
+                  {message.replyTo.contentType === "rich" &&
+                  message.replyTo.richContent ? (
+                    <RichTextRenderer
+                      content={message.replyTo.richContent}
+                      compact
+                      className="text-xs"
+                    />
+                  ) : (
+                    <p>{message.replyTo.content}</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -268,10 +285,19 @@ export default function ChatMessage({
                 </div>
               )}
 
-              {/* Text content */}
-              {hasTextContent && (
+              {/* Text content - Enhanced with Rich Text Support */}
+              {(hasTextContent || hasRichContent) && (
                 <div className={cn(isMediaOnlyMessage ? "p-4 pt-2" : "p-2")}>
-                  <p>{message.content}</p>
+                  {hasRichContent ? (
+                    <RichTextRenderer
+                      content={message.richContent!}
+                      className="message-rich-content"
+                    />
+                  ) : (
+                    <p className="break-words whitespace-pre-wrap">
+                      {message.content}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -361,6 +387,12 @@ export default function ChatMessage({
             {isOwnMessage && (
               <div className="ml-1 flex items-center">
                 <Check className="h-3 w-3" />
+              </div>
+            )}
+            {/* Rich text indicator */}
+            {hasRichContent && (
+              <div className="ml-1 text-primary/60" title="Rich text message">
+                <Type className="h-3 w-3" />
               </div>
             )}
           </div>
