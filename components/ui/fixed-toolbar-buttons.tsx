@@ -3,7 +3,7 @@
 "use client";
 
 import React from "react";
-import { useEditorReadOnly } from "platejs/react";
+import { useEditorReadOnly, useEditorValue } from "platejs/react";
 import { Bold, Italic, Underline, Strikethrough, Code } from "lucide-react";
 import { KEYS } from "platejs";
 import { MarkToolbarButton } from "@/components/ui/mark-toolbar-button";
@@ -23,6 +23,7 @@ export function FixedToolbarButtons({
 }: FixedToolbarButtonsProps) {
   const editor = useEditor();
   const readOnly = useEditorReadOnly();
+  const editorValue = useEditorValue(); // Use this hook to get current editor value
 
   const clearContent = () => {
     editor.tf.setValue(initialEditorValue);
@@ -32,10 +33,10 @@ export function FixedToolbarButtons({
   };
 
   const hasContent = React.useMemo(() => {
-    if (!editor.value) return false;
+    if (!editorValue) return false;
     return (
-      Array.isArray(editor.value) &&
-      editor.value.some((node: any) =>
+      Array.isArray(editorValue) &&
+      editorValue.some((node: any) =>
         node.children?.some(
           (child: any) =>
             typeof child === "object" &&
@@ -45,7 +46,7 @@ export function FixedToolbarButtons({
         ),
       )
     );
-  }, [editor.value]);
+  }, [editorValue]); // Now depends on the reactive editorValue
 
   return (
     <div className="flex w-full">

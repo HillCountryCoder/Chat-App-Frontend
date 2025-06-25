@@ -72,12 +72,11 @@ export function RichTextEditor({
     [handleSubmit],
   );
 
-  // Sync external value changes with editor
+  // FIXED: Sync external value changes with editor properly
   useEffect(() => {
     if (JSON.stringify(value) !== JSON.stringify(editorValue)) {
-      setEditorValue(editorValue);
-      // Also update the editor state when value prop changes
-      editor.tf.setValue(editorValue);
+      setEditorValue(value);
+      editor.tf.setValue(value);
     }
   }, [value, editorValue, editor]);
 

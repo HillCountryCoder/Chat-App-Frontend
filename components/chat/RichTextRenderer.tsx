@@ -6,7 +6,7 @@ import type { Value } from "platejs";
 import { Plate, usePlateEditor } from "platejs/react";
 import { Editor, EditorContainer } from "@/components/ui/editor";
 import { cn } from "@/lib/utils";
-import { EditorKit } from "../editor/editor-kit";
+import { RendererKit } from "../editor/renderer-kit"; // Use RendererKit instead of EditorKit
 
 interface RichTextRendererProps {
   content: Value | string;
@@ -49,7 +49,7 @@ export function RichTextRenderer({
   }, [content]);
 
   const editor = usePlateEditor({
-    plugins: EditorKit,
+    plugins: RendererKit, // Use RendererKit instead of EditorKit
     value: plateValue,
   });
 
