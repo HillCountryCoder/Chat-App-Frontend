@@ -2,35 +2,15 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { Value } from "platejs";
-import {
-  BoldPlugin,
-  ItalicPlugin,
-  UnderlinePlugin,
-  StrikethroughPlugin,
-  CodePlugin,
-} from "@platejs/basic-nodes/react";
-import { BlockquotePlugin } from "@platejs/basic-nodes/react";
 import { Plate, usePlateEditor } from "platejs/react";
 
 import { cn } from "@/lib/utils";
-import {
-  Bold,
-  Italic,
-  Underline,
-  Strikethrough,
-  Code,
-  Quote,
-} from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Bold, Italic, Underline, Strikethrough, Code } from "lucide-react";
 import { Editor, EditorContainer } from "@/components/ui/editor";
 import { FixedToolbar } from "@/components/ui/fixed-toolbar";
 import { MarkToolbarButton } from "@/components/ui/mark-toolbar-button";
 import { ToolbarButton } from "@/components/ui/toolbar";
+import { EditorKit } from "../editor/editor-kit";
 
 interface RichTextEditorProps {
   value?: Value;
@@ -48,7 +28,7 @@ interface RichTextEditorProps {
 
 const initialValue: Value = [
   {
-    id: 1,
+    id: "1",
     type: "p",
     children: [{ text: "" }],
   },
@@ -71,14 +51,7 @@ export function RichTextEditor({
   const [isFocused, setIsFocused] = useState(false);
 
   const editor = usePlateEditor({
-    plugins: [
-      BoldPlugin,
-      ItalicPlugin,
-      UnderlinePlugin,
-      StrikethroughPlugin,
-      CodePlugin,
-      BlockquotePlugin,
-    ],
+    plugins: EditorKit,
     value: editorValue,
   });
 
@@ -87,7 +60,7 @@ export function RichTextEditor({
       setEditorValue(newValue);
       onChange?.(newValue);
     },
-    [],
+    [onChange],
   );
 
   const handleSubmit = useCallback(
@@ -122,15 +95,31 @@ export function RichTextEditor({
     );
   }, [editorValue]);
 
+  // FIXED: Use editor.tf.setValue() to properly reset the editor
   const clearContent = useCallback(() => {
+    // Use Plate's setValue transform to update the editor state
+    editor.tf.setValue(initialValue);
+
+    // Also update React state for consistency
     setEditorValue(initialValue);
+
+    // Notify parent component
     onChange?.(initialValue);
-  }, [onChange]);
+    // Focus the editor after clearing
+    setTimeout(() => {
+      editor.tf.focus();
+    }, 0);
+  }, [editor, onChange]);
+
+  // Sync external value changes with editor
   useEffect(() => {
-    if (value !== editorValue) {
+    if (JSON.stringify(value) !== JSON.stringify(editorValue)) {
       setEditorValue(value);
+      // Also update the editor state when value prop changes
+      editor.tf.setValue(value);
     }
-  }, [value]);
+  }, [value, editorValue, editor]);
+
   return (
     <div className={cn("relative", className)}>
       <Plate editor={editor} onChange={handleValueChange}>
@@ -143,84 +132,66 @@ export function RichTextEditor({
         >
           {showToolbar && (
             <FixedToolbar className="flex justify-start gap-1 p-2 border-b bg-muted/30">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <MarkToolbarButton
-                      nodeType="bold"
-                      tooltip="Bold (⌘+B)"
-                      disabled={disabled}
-                    >
-                      <Bold className="h-4 w-4" />
-                    </MarkToolbarButton>
-                  </TooltipTrigger>
-                  <TooltipContent>Bold (⌘+B)</TooltipContent>
-                </Tooltip>
+              <ToolbarButton onClick={() => editor.tf.h1.toggle()}>
+                H1
+              </ToolbarButton>
+              <ToolbarButton onClick={() => editor.tf.h2.toggle()}>
+                H2
+              </ToolbarButton>
+              <ToolbarButton onClick={() => editor.tf.h3.toggle()}>
+                H3
+              </ToolbarButton>
+              <ToolbarButton onClick={() => editor.tf.blockquote.toggle()}>
+                Quote
+              </ToolbarButton>
+              <ToolbarButton onClick={() => editor.tf.code_block.toggle()}>
+                Code
+              </ToolbarButton>
+              <ToolbarButton
+                onClick={clearContent}
+                disabled={disabled || loading || !hasContent}
+              >
+                Clear
+              </ToolbarButton>
+              <MarkToolbarButton
+                nodeType="bold"
+                tooltip="Bold (⌘+B)"
+                disabled={disabled}
+              >
+                <Bold className="h-4 w-4" />
+              </MarkToolbarButton>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <MarkToolbarButton
-                      nodeType="italic"
-                      tooltip="Italic (⌘+I)"
-                      disabled={disabled}
-                    >
-                      <Italic className="h-4 w-4" />
-                    </MarkToolbarButton>
-                  </TooltipTrigger>
-                  <TooltipContent>Italic (⌘+I)</TooltipContent>
-                </Tooltip>
+              <MarkToolbarButton
+                nodeType="italic"
+                tooltip="Italic (⌘+I)"
+                disabled={disabled}
+              >
+                <Italic className="h-4 w-4" />
+              </MarkToolbarButton>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <MarkToolbarButton
-                      nodeType="underline"
-                      tooltip="Underline (⌘+U)"
-                      disabled={disabled}
-                    >
-                      <Underline className="h-4 w-4" />
-                    </MarkToolbarButton>
-                  </TooltipTrigger>
-                  <TooltipContent>Underline (⌘+U)</TooltipContent>
-                </Tooltip>
+              <MarkToolbarButton
+                nodeType="underline"
+                tooltip="Underline (⌘+U)"
+                disabled={disabled}
+              >
+                <Underline className="h-4 w-4" />
+              </MarkToolbarButton>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <MarkToolbarButton
-                      nodeType="strikethrough"
-                      tooltip="Strikethrough"
-                      disabled={disabled}
-                    >
-                      <Strikethrough className="h-4 w-4" />
-                    </MarkToolbarButton>
-                  </TooltipTrigger>
-                  <TooltipContent>Strikethrough</TooltipContent>
-                </Tooltip>
+              <MarkToolbarButton
+                nodeType="strikethrough"
+                tooltip="Strikethrough"
+                disabled={disabled}
+              >
+                <Strikethrough className="h-4 w-4" />
+              </MarkToolbarButton>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <MarkToolbarButton
-                      nodeType="code"
-                      tooltip="Inline Code"
-                      disabled={disabled}
-                    >
-                      <Code className="h-4 w-4" />
-                    </MarkToolbarButton>
-                  </TooltipTrigger>
-                  <TooltipContent>Inline Code</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <ToolbarButton
-                      onClick={() => editor.tf.blockquote.toggle()}
-                      disabled={disabled}
-                    >
-                      <Quote className="h-4 w-4" />
-                    </ToolbarButton>
-                  </TooltipTrigger>
-                  <TooltipContent>Quote</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <MarkToolbarButton
+                nodeType="code"
+                tooltip="Inline Code"
+                disabled={disabled}
+              >
+                <Code className="h-4 w-4" />
+              </MarkToolbarButton>
             </FixedToolbar>
           )}
 

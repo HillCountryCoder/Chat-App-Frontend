@@ -3,17 +3,10 @@
 
 import React, { useMemo } from "react";
 import type { Value } from "platejs";
-import {
-  BoldPlugin,
-  ItalicPlugin,
-  UnderlinePlugin,
-  StrikethroughPlugin,
-  CodePlugin,
-  BlockquotePlugin,
-} from "@platejs/basic-nodes/react";
 import { Plate, usePlateEditor } from "platejs/react";
 import { Editor, EditorContainer } from "@/components/ui/editor";
 import { cn } from "@/lib/utils";
+import { EditorKit } from "../editor/editor-kit";
 
 interface RichTextRendererProps {
   content: Value | string;
@@ -56,14 +49,7 @@ export function RichTextRenderer({
   }, [content]);
 
   const editor = usePlateEditor({
-    plugins: [
-      BoldPlugin,
-      ItalicPlugin,
-      UnderlinePlugin,
-      StrikethroughPlugin,
-      CodePlugin,
-      BlockquotePlugin,
-    ],
+    plugins: EditorKit,
     value: plateValue,
   });
 
