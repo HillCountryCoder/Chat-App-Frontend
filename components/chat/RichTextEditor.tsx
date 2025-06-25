@@ -1,16 +1,13 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import type { Value } from "platejs";
 import { Plate, usePlateEditor } from "platejs/react";
 
 import { cn } from "@/lib/utils";
-import { Bold, Italic, Underline, Strikethrough, Code } from "lucide-react";
 import { Editor, EditorContainer } from "@/components/ui/editor";
-import { FixedToolbar } from "@/components/ui/fixed-toolbar";
-import { MarkToolbarButton } from "@/components/ui/mark-toolbar-button";
-import { ToolbarButton } from "@/components/ui/toolbar";
 import { EditorKit } from "../editor/editor-kit";
+import { initialEditorValue } from "@/utils/rich-text";
 
 interface RichTextEditorProps {
   value?: Value;
@@ -26,16 +23,8 @@ interface RichTextEditorProps {
   autoFocus?: boolean;
 }
 
-const initialValue: Value = [
-  {
-    id: "1",
-    type: "p",
-    children: [{ text: "" }],
-  },
-];
-
 export function RichTextEditor({
-  value = initialValue,
+  value = initialEditorValue,
   onChange,
   onSubmit,
   placeholder = "Type a message...",
@@ -44,7 +33,6 @@ export function RichTextEditor({
   className,
   minHeight = 60,
   maxHeight = 200,
-  showToolbar = true,
   autoFocus = false,
 }: RichTextEditorProps) {
   const [editorValue, setEditorValue] = useState<Value>(value);
@@ -57,6 +45,7 @@ export function RichTextEditor({
 
   const handleValueChange = useCallback(
     ({ value: newValue }: { value: Value }) => {
+      // Normalize the value to ensure all IDs are strings
       setEditorValue(newValue);
       onChange?.(newValue);
     },
@@ -83,40 +72,12 @@ export function RichTextEditor({
     [handleSubmit],
   );
 
-  const hasContent = useMemo(() => {
-    return editorValue.some((node) =>
-      node.children?.some(
-        (child) =>
-          typeof child === "object" &&
-          "text" in child &&
-          typeof child.text === "string" &&
-          child.text.trim(),
-      ),
-    );
-  }, [editorValue]);
-
-  // FIXED: Use editor.tf.setValue() to properly reset the editor
-  const clearContent = useCallback(() => {
-    // Use Plate's setValue transform to update the editor state
-    editor.tf.setValue(initialValue);
-
-    // Also update React state for consistency
-    setEditorValue(initialValue);
-
-    // Notify parent component
-    onChange?.(initialValue);
-    // Focus the editor after clearing
-    setTimeout(() => {
-      editor.tf.focus();
-    }, 0);
-  }, [editor, onChange]);
-
   // Sync external value changes with editor
   useEffect(() => {
     if (JSON.stringify(value) !== JSON.stringify(editorValue)) {
-      setEditorValue(value);
+      setEditorValue(editorValue);
       // Also update the editor state when value prop changes
-      editor.tf.setValue(value);
+      editor.tf.setValue(editorValue);
     }
   }, [value, editorValue, editor]);
 
@@ -130,70 +91,7 @@ export function RichTextEditor({
             disabled && "opacity-50",
           )}
         >
-          {showToolbar && (
-            <FixedToolbar className="flex justify-start gap-1 p-2 border-b bg-muted/30">
-              <ToolbarButton onClick={() => editor.tf.h1.toggle()}>
-                H1
-              </ToolbarButton>
-              <ToolbarButton onClick={() => editor.tf.h2.toggle()}>
-                H2
-              </ToolbarButton>
-              <ToolbarButton onClick={() => editor.tf.h3.toggle()}>
-                H3
-              </ToolbarButton>
-              <ToolbarButton onClick={() => editor.tf.blockquote.toggle()}>
-                Quote
-              </ToolbarButton>
-              <ToolbarButton onClick={() => editor.tf.code_block.toggle()}>
-                Code
-              </ToolbarButton>
-              <ToolbarButton
-                onClick={clearContent}
-                disabled={disabled || loading || !hasContent}
-              >
-                Clear
-              </ToolbarButton>
-              <MarkToolbarButton
-                nodeType="bold"
-                tooltip="Bold (⌘+B)"
-                disabled={disabled}
-              >
-                <Bold className="h-4 w-4" />
-              </MarkToolbarButton>
-
-              <MarkToolbarButton
-                nodeType="italic"
-                tooltip="Italic (⌘+I)"
-                disabled={disabled}
-              >
-                <Italic className="h-4 w-4" />
-              </MarkToolbarButton>
-
-              <MarkToolbarButton
-                nodeType="underline"
-                tooltip="Underline (⌘+U)"
-                disabled={disabled}
-              >
-                <Underline className="h-4 w-4" />
-              </MarkToolbarButton>
-
-              <MarkToolbarButton
-                nodeType="strikethrough"
-                tooltip="Strikethrough"
-                disabled={disabled}
-              >
-                <Strikethrough className="h-4 w-4" />
-              </MarkToolbarButton>
-
-              <MarkToolbarButton
-                nodeType="code"
-                tooltip="Inline Code"
-                disabled={disabled}
-              >
-                <Code className="h-4 w-4" />
-              </MarkToolbarButton>
-            </FixedToolbar>
-          )}
+          {/* Toolbar is now handled by FixedToolbarKit plugin */}
 
           <EditorContainer>
             <Editor
