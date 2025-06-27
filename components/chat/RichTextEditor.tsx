@@ -9,6 +9,10 @@ import { Editor, EditorContainer } from "@/components/ui/editor";
 import { EditorKit } from "../editor/editor-kit";
 import { initialEditorValue } from "@/utils/rich-text";
 
+interface ExtendedHTMLDivElement extends HTMLDivElement {
+  handleSubmit?: () => void;
+}
+
 interface RichTextEditorProps {
   value?: Value;
   onChange?: (value: Value) => void;
@@ -39,7 +43,7 @@ export function RichTextEditor({
 }: RichTextEditorProps) {
   const [editorValue, setEditorValue] = useState<Value>(value);
   const [isFocused, setIsFocused] = useState(false);
-  const editorRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<ExtendedHTMLDivElement>(null);
 
   const editor = usePlateEditor({
     plugins: EditorKit,
@@ -75,9 +79,6 @@ export function RichTextEditor({
         handleSubmit();
         return;
       }
-
-      // Allow all other keys to be handled by PlateJS naturally
-      // This includes normal Enter for new lines when submitOnEnter is false
     },
     [handleSubmit, submitOnEnter],
   );
@@ -96,7 +97,7 @@ export function RichTextEditor({
   // Expose handleSubmit method to parent component
   useEffect(() => {
     if (editorRef.current) {
-      (editorRef.current as any).handleSubmit = handleSubmit;
+      editorRef.current.handleSubmit = handleSubmit;
     }
   }, [handleSubmit]);
 
