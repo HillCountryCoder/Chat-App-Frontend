@@ -4,7 +4,18 @@
 
 import React from "react";
 import { useEditorReadOnly, useEditorValue } from "platejs/react";
-import { Bold, Italic, Underline, Strikethrough, Code } from "lucide-react";
+import {
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Code,
+  Highlighter,
+  Subscript,
+  Superscript,
+  Keyboard,
+  Pilcrow, // For paragraph icon
+} from "lucide-react";
 import { KEYS } from "platejs";
 import { MarkToolbarButton } from "@/components/ui/mark-toolbar-button";
 import { ToolbarButton } from "@/components/ui/toolbar";
@@ -23,7 +34,7 @@ export function FixedToolbarButtons({
 }: FixedToolbarButtonsProps) {
   const editor = useEditor();
   const readOnly = useEditorReadOnly();
-  const editorValue = useEditorValue(); // Use this hook to get current editor value
+  const editorValue = useEditorValue();
 
   const clearContent = () => {
     editor.tf.setValue(initialEditorValue);
@@ -46,7 +57,7 @@ export function FixedToolbarButtons({
         ),
       )
     );
-  }, [editorValue]); // Now depends on the reactive editorValue
+  }, [editorValue]);
 
   return (
     <div className="flex w-full">
@@ -54,6 +65,13 @@ export function FixedToolbarButtons({
         <>
           {/* Block formatting buttons */}
           <ToolbarGroup>
+            <ToolbarButton
+              onClick={() => editor.tf.toggleBlock("paragraph")}
+              disabled={disabled}
+              tooltip="Paragraph"
+            >
+              <Pilcrow className="h-4 w-4" />
+            </ToolbarButton>
             <ToolbarButton
               onClick={() => editor.tf.h1.toggle()}
               disabled={disabled}
@@ -91,7 +109,7 @@ export function FixedToolbarButtons({
             </ToolbarButton>
           </ToolbarGroup>
 
-          {/* Text formatting buttons */}
+          {/* Basic text formatting */}
           <ToolbarGroup>
             <MarkToolbarButton
               nodeType={KEYS.bold}
@@ -119,18 +137,56 @@ export function FixedToolbarButtons({
 
             <MarkToolbarButton
               nodeType={KEYS.strikethrough}
-              tooltip="Strikethrough"
+              tooltip="Strikethrough (⌘+Shift+X)"
               disabled={disabled}
             >
               <Strikethrough className="h-4 w-4" />
             </MarkToolbarButton>
+          </ToolbarGroup>
 
+          {/* Code and special formatting */}
+          <ToolbarGroup>
             <MarkToolbarButton
               nodeType={KEYS.code}
               tooltip="Inline Code (⌘+E)"
               disabled={disabled}
             >
               <Code className="h-4 w-4" />
+            </MarkToolbarButton>
+
+            <MarkToolbarButton
+              nodeType={KEYS.highlight}
+              tooltip="Highlight (⌘+Shift+H)"
+              disabled={disabled}
+            >
+              <Highlighter className="h-4 w-4" />
+            </MarkToolbarButton>
+
+            <MarkToolbarButton
+              nodeType={KEYS.kbd}
+              tooltip="Keyboard (Kbd)"
+              disabled={disabled}
+            >
+              <Keyboard className="h-4 w-4" />
+            </MarkToolbarButton>
+          </ToolbarGroup>
+
+          {/* Subscript and Superscript */}
+          <ToolbarGroup>
+            <MarkToolbarButton
+              nodeType={KEYS.sub}
+              tooltip="Subscript (⌘+,)"
+              disabled={disabled}
+            >
+              <Subscript className="h-4 w-4" />
+            </MarkToolbarButton>
+
+            <MarkToolbarButton
+              nodeType={KEYS.sup}
+              tooltip="Superscript (⌘+.)"
+              disabled={disabled}
+            >
+              <Superscript className="h-4 w-4" />
             </MarkToolbarButton>
           </ToolbarGroup>
         </>

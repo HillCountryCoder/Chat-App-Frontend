@@ -34,11 +34,11 @@ import {
 import { Attachment } from "@/types/attachment";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import RichTextEditor from "./RichTextEditor";
 import { InlineRichTextRenderer } from "./RichTextRenderer";
 import { ContentType } from "@/types/chat";
 import type { Value } from "platejs";
 import { hasContent, valueToText, initialEditorValue } from "@/utils/rich-text";
+import { RichTextEditor } from "./RichTextEditor";
 interface ChatWindowProps {
   directMessageId: string;
   recipientId?: string;
@@ -244,7 +244,7 @@ export default function ChatWindow({
     if (directMessageId) {
       markDirectMessageAsRead.mutate(directMessageId);
     }
-  }, [directMessageId, markDirectMessageAsRead]);
+  }, [directMessageId]);
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -364,12 +364,31 @@ export default function ChatWindow({
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const fileCounts = getFileCounts();
-  const canSendMessage =
-    (newMessage.trim() ||
-      hasCompletedUploads ||
-      uploadedAttachments.length > 0) &&
-    isReadyToSend() &&
-    !sendMessageMutation.isPending;
+  const canSendMessage = useMemo(() => {
+    // Check if we have text content based on current mode
+    const hasTextContent = isRichTextMode
+      ? hasContent(richContent) // Check rich content
+      : newMessage.trim(); // Check plain text
+
+    // Check if we have attachments
+    const hasAttachments =
+      hasCompletedUploads || uploadedAttachments.length > 0;
+
+    // Can send if we have content OR attachments, and ready to send, and not pending
+    return (
+      (hasTextContent || hasAttachments) &&
+      isReadyToSend() &&
+      !sendMessageMutation.isPending
+    );
+  }, [
+    isRichTextMode,
+    richContent,
+    newMessage,
+    hasCompletedUploads,
+    uploadedAttachments.length,
+    isReadyToSend,
+    sendMessageMutation.isPending,
+  ]);
 
   return (
     <div className="flex flex-col h-full">
@@ -578,7 +597,7 @@ export default function ChatWindow({
 
         {/* Message Input */}
         <div className="p-4">
-          <form onSubmit={handleSendMessage} className="flex gap-2">
+          <div className="flex gap-2">
             <Button
               type="button"
               size="icon"
@@ -607,24 +626,19 @@ export default function ChatWindow({
                 <RichTextEditor
                   value={richContent}
                   onChange={setRichContent}
-                  placeholder="Type a message..."
-                  onSubmit={() => {
-                    const form = new Event("submit", {
-                      bubbles: true,
-                      cancelable: true,
-                    });
-                    const formElement = document.querySelector("form");
-                    if (formElement) {
-                      formElement.dispatchEvent(form);
-                    }
-                  }}
+                  placeholder="Type a message... Press Ctrl+Enter to send, Enter for new line"
+                  submitOnEnter={false} // Don't submit on Enter, allow new lines
+                  onSubmit={() => handleSendMessage(new Event("submit") as any)}
+                  minHeight={40}
+                  maxHeight={120}
+                  className="border-0" // Remove border since we have form styling
                 />
               </div>
             ) : (
               <Input
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Type a message..."
+                placeholder="Type a message... Press Enter to send"
                 className="flex-1"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -634,18 +648,20 @@ export default function ChatWindow({
                 }}
               />
             )}
+
             <Button
-              type="submit"
+              type="button"
               size="icon"
               disabled={!canSendMessage}
               className={cn(isUploading && "animate-pulse")}
               title={
                 hasOnlyFailedFiles
                   ? "Remove failed files to send message"
-                  : canSendMessage
-                  ? "Send message"
-                  : "Add content or files to send"
+                  : isRichTextMode
+                  ? "Send message (or Ctrl+Enter)"
+                  : "Send message (or Enter)"
               }
+              onClick={() => handleSendMessage(new Event("click") as any)}
             >
               {sendMessageMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -655,7 +671,7 @@ export default function ChatWindow({
                 <Send size={18} />
               )}
             </Button>
-          </form>
+          </div>
         </div>
       </div>
 

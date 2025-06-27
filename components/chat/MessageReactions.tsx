@@ -33,6 +33,12 @@ function MessageReactions({
   const { socket } = useSocket();
   const { user } = useAuthStore();
   const { closeAllMenus } = useReaction();
+  
+  // Use isOwnMessage to potentially modify styles or behavior
+  const containerClassName = cn(
+    "flex flex-wrap items-center gap-1 mt-1",
+    isOwnMessage && "justify-end"
+  );
 
   // Track if user has reacted with each emoji
   const hasUserReacted = (reaction: Reaction) => {
@@ -101,7 +107,7 @@ function MessageReactions({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1 mt-1">
+    <div className={containerClassName}>
       {reactions.map((reaction) => (
         <TooltipProvider key={reaction.emoji}>
           <Tooltip>

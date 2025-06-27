@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import type { Value } from "platejs";
 import { Plate, usePlateEditor } from "platejs/react";
 
@@ -21,6 +21,7 @@ interface RichTextEditorProps {
   maxHeight?: number;
   showToolbar?: boolean;
   autoFocus?: boolean;
+  submitOnEnter?: boolean;
 }
 
 export function RichTextEditor({
@@ -34,9 +35,11 @@ export function RichTextEditor({
   minHeight = 60,
   maxHeight = 200,
   autoFocus = false,
+  submitOnEnter = true,
 }: RichTextEditorProps) {
   const [editorValue, setEditorValue] = useState<Value>(value);
   const [isFocused, setIsFocused] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
 
   const editor = usePlateEditor({
     plugins: EditorKit,
@@ -45,43 +48,60 @@ export function RichTextEditor({
 
   const handleValueChange = useCallback(
     ({ value: newValue }: { value: Value }) => {
-      // Normalize the value to ensure all IDs are strings
       setEditorValue(newValue);
       onChange?.(newValue);
     },
     [onChange],
   );
 
-  const handleSubmit = useCallback(
-    (e?: React.FormEvent) => {
-      e?.preventDefault();
-      if (onSubmit && !disabled && !loading) {
-        onSubmit(editorValue);
-      }
-    },
-    [onSubmit, editorValue, disabled, loading],
-  );
+  const handleSubmit = useCallback(() => {
+    if (onSubmit && !disabled && !loading) {
+      onSubmit(editorValue);
+    }
+  }, [onSubmit, editorValue, disabled, loading]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) {
+      // Handle Ctrl+Enter or Cmd+Enter for submit
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         handleSubmit();
+        return;
       }
+
+      // Handle Enter based on submitOnEnter prop
+      if (e.key === "Enter" && !e.shiftKey && submitOnEnter) {
+        e.preventDefault();
+        handleSubmit();
+        return;
+      }
+
+      // Allow all other keys to be handled by PlateJS naturally
+      // This includes normal Enter for new lines when submitOnEnter is false
     },
-    [handleSubmit],
+    [handleSubmit, submitOnEnter],
   );
 
-  // FIXED: Sync external value changes with editor properly
+  // Sync external value changes with editor properly
   useEffect(() => {
     if (JSON.stringify(value) !== JSON.stringify(editorValue)) {
       setEditorValue(value);
-      editor.tf.setValue(value);
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        editor.tf.setValue(value);
+      });
     }
   }, [value, editorValue, editor]);
 
+  // Expose handleSubmit method to parent component
+  useEffect(() => {
+    if (editorRef.current) {
+      (editorRef.current as any).handleSubmit = handleSubmit;
+    }
+  }, [handleSubmit]);
+
   return (
-    <div className={cn("relative", className)}>
+    <div className={cn("relative", className)} ref={editorRef}>
       <Plate editor={editor} onChange={handleValueChange}>
         <div
           className={cn(
@@ -90,8 +110,6 @@ export function RichTextEditor({
             disabled && "opacity-50",
           )}
         >
-          {/* Toolbar is now handled by FixedToolbarKit plugin */}
-
           <EditorContainer>
             <Editor
               variant={"fullWidth"}
@@ -111,6 +129,8 @@ export function RichTextEditor({
                 "focus:outline-none",
                 "placeholder:text-muted-foreground",
                 disabled && "opacity-50 cursor-not-allowed",
+                // Ensure text selection works properly
+                "select-text [&_*]:select-text",
               )}
             />
           </EditorContainer>
