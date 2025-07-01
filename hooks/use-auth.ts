@@ -120,20 +120,24 @@ export function useLogout() {
         try {
           await apiClient.post("/auth/logout", { refreshToken });
         } catch (error) {
-          console.error("Server logout failed:", error);
+          // If logout fails due to token issues, don't throw - we still want to clear local state
+          console.warn("Server logout failed (likely due to expired token):", error);
         }
       }
       return true;
     },
     onSuccess: () => {
-      // Remove both tokens
+      // Always clear local state regardless of server response
       Cookies.remove("token");
       Cookies.remove("refreshToken");
-
-      // Clear auth data from Zustand
       actions.logout();
-
-      // Clear any user-specific cached queries
+      queryClient.clear();
+    },
+    onError: () => {
+      // Even if the mutation "fails", still clear local state
+      Cookies.remove("token");
+      Cookies.remove("refreshToken");
+      actions.logout();
       queryClient.clear();
     },
   });
