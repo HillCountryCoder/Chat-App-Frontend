@@ -6,13 +6,29 @@ import { User } from "@/types/user";
 interface AuthState {
   user: User | null;
   token: string | null;
+  refreshToken: string | null; // Add refresh token
   isAuthenticated: boolean;
   isLoading: boolean;
+  expiresIn: string | null; // Add expires in
+  sessionInfo: {
+    loginTime: string | null;
+    rememberMe: boolean;
+    deviceInfo: string | null;
+  };
   actions: {
     setUser: (user: User | null) => void;
     setToken: (token: string | null) => void;
-    login: (user: User, token: string) => void;
+    setRefreshToken: (refreshToken: string | null) => void;
+    setSessionInfo: (info: Partial<AuthState["sessionInfo"]>) => void;
+    login: (
+      user: User,
+      accessToken: string,
+      refreshToken: string,
+      expiresIn: string,
+      rememberMe?: boolean,
+    ) => void;
     logout: () => void;
+    updateTokens: (accessToken: string, refreshToken: string) => void;
   };
 }
 
@@ -21,8 +37,15 @@ export const useAuthStore = create<AuthState>()(
     immer((set) => ({
       user: null,
       token: null,
+      refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
+      expiresIn: null,
+      sessionInfo: {
+        loginTime: null,
+        rememberMe: false,
+        deviceInfo: null,
+      },
       actions: {
         setUser: (user) =>
           set((state) => {
@@ -32,18 +55,53 @@ export const useAuthStore = create<AuthState>()(
         setToken: (token) =>
           set((state) => {
             state.token = token;
+            state.isAuthenticated = !!token;
           }),
-        login: (user, token) =>
+        setRefreshToken: (refreshToken) =>
+          set((state) => {
+            state.refreshToken = refreshToken;
+          }),
+        setSessionInfo: (info) =>
+          set((state) => {
+            state.sessionInfo = { ...state.sessionInfo, ...info };
+          }),
+        login: (
+          user,
+          accessToken,
+          refreshToken,
+          expiresIn,
+          rememberMe = false,
+        ) =>
           set((state) => {
             state.user = user;
-            state.token = token;
+            state.token = accessToken;
+            state.refreshToken = refreshToken;
+            state.expiresIn = expiresIn;
             state.isAuthenticated = true;
+            state.sessionInfo = {
+              loginTime: new Date().toISOString(),
+              rememberMe,
+              deviceInfo:
+                typeof navigator !== "undefined" ? navigator.userAgent : null,
+            };
           }),
         logout: () =>
           set((state) => {
             state.user = null;
             state.token = null;
+            state.refreshToken = null;
+            state.expiresIn = null;
             state.isAuthenticated = false;
+            state.sessionInfo = {
+              loginTime: null,
+              rememberMe: false,
+              deviceInfo: null,
+            };
+          }),
+        updateTokens: (accessToken, refreshToken) =>
+          set((state) => {
+            state.token = accessToken;
+            state.refreshToken = refreshToken;
           }),
       },
     })),
@@ -52,7 +110,9 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         user: state.user,
         token: state.token,
-        isAuthenticated: state.isAuthenticated,
+        refreshToken: state.refreshToken,
+        expiresIn: state.expiresIn,
+        sessionInfo: state.sessionInfo,
       }),
     },
   ),

@@ -1,4 +1,3 @@
-// src/hooks/use-auth.ts
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, apiClient } from "@/lib/api";
 import { useAuthStore } from "@/store/auth-store";
@@ -16,7 +15,6 @@ export function useLogin() {
         const response = await apiClient.post("/auth/login", data);
         return response;
       } catch (error) {
-        // The error is already transformed to a BaseError by our API client
         if (error instanceof BaseError) {
           throw error;
         }
@@ -24,17 +22,36 @@ export function useLogin() {
       }
     },
     onSuccess: (data) => {
-      // Store token in cookie - accessible to middleware
-      Cookies.set("token", data.token, {
-        expires: 7, // 7 days
+      const { user, accessToken, refreshToken, expiresIn } = data;
+
+      const cookieOptions = {
         path: "/",
-        sameSite: "strict",
+        sameSite: "strict" as const,
+        secure: process.env.NODE_ENV === "production",
+      };
+
+      // Store access token (short-lived - 15 minutes)
+      Cookies.set("token", accessToken, {
+        ...cookieOptions,
+        expires: 1, // 1 day (but token expires in 15 mins)
       });
 
-      // Also store in Zustand for client-side usage
-      actions.login(data.user, data.token);
+      // Store refresh token (duration based on rememberMe)
+      const refreshTokenExpiry = expiresIn === "30d" ? 30 : 7;
+      Cookies.set("refreshToken", refreshToken, {
+        ...cookieOptions,
+        expires: refreshTokenExpiry,
+      });
 
-      // Invalidate any queries that might depend on authentication
+      // Update Zustand store
+      actions.login(
+        user,
+        accessToken,
+        refreshToken,
+        expiresIn,
+        expiresIn === "30d", // rememberMe = true if expiresIn is 30d
+      );
+
       queryClient.invalidateQueries({ queryKey: ["user"] });
     },
   });
@@ -50,7 +67,6 @@ export function useRegister() {
         const response = await apiClient.post("/auth/register", data);
         return response;
       } catch (error) {
-        // The error is already transformed to a BaseError by our API client
         if (error instanceof BaseError) {
           throw error;
         }
@@ -58,15 +74,35 @@ export function useRegister() {
       }
     },
     onSuccess: (data) => {
-      // Store token in cookie - accessible to middleware
-      Cookies.set("token", data.token, {
-        expires: 7, // 7 days
+      const { user, accessToken, refreshToken, expiresIn } = data;
+
+      const cookieOptions = {
         path: "/",
-        sameSite: "strict",
+        sameSite: "strict" as const,
+        secure: process.env.NODE_ENV === "production",
+      };
+
+      // Store access token
+      Cookies.set("token", accessToken, {
+        ...cookieOptions,
+        expires: 1,
       });
 
-      // Persist auth data using Zustand
-      actions.login(data.user, data.token);
+      // Store refresh token
+      const refreshTokenExpiry = expiresIn === "30d" ? 30 : 7;
+      Cookies.set("refreshToken", refreshToken, {
+        ...cookieOptions,
+        expires: refreshTokenExpiry,
+      });
+
+      // Update Zustand store
+      actions.login(
+        user,
+        accessToken,
+        refreshToken,
+        expiresIn,
+        expiresIn === "30d",
+      );
 
       queryClient.invalidateQueries({ queryKey: ["user"] });
     },
@@ -79,11 +115,20 @@ export function useLogout() {
 
   return useMutation({
     mutationFn: async () => {
+      const refreshToken = Cookies.get("refreshToken");
+      if (refreshToken) {
+        try {
+          await apiClient.post("/auth/logout", { refreshToken });
+        } catch (error) {
+          console.error("Server logout failed:", error);
+        }
+      }
       return true;
     },
     onSuccess: () => {
-      // Remove the cookie
+      // Remove both tokens
       Cookies.remove("token");
+      Cookies.remove("refreshToken");
 
       // Clear auth data from Zustand
       actions.logout();
@@ -101,7 +146,6 @@ export function useUser() {
       const { data } = await api.get("/auth/me");
       return data.user;
     },
-    // Only fetch user data if we're authenticated
     enabled: !!useAuthStore.getState().isAuthenticated,
   });
 }

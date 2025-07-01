@@ -24,7 +24,6 @@ import { BaseError, ErrorCodes } from "@/lib/errors";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const login = useLogin();
 
@@ -33,6 +32,7 @@ export default function LoginPage() {
     defaultValues: {
       identifier: "",
       password: "",
+      rememberMe: false,
     },
   });
 
@@ -41,7 +41,6 @@ export default function LoginPage() {
       await login.mutateAsync(data);
       router.push("/chat");
     } catch (error) {
-      // Error is handled by the mutation and will be available in login.error
       console.error("Login failed", error);
     }
   };
@@ -50,11 +49,9 @@ export default function LoginPage() {
     setShowPassword(!showPassword);
   };
 
-  // Define custom error actions for specific error types
   const getErrorActions = () => {
     if (!login.error) return null;
 
-    // Only show special actions for NOT_FOUND errors (user not found)
     if ((login.error as BaseError).code === ErrorCodes.NOT_FOUND) {
       return (
         <Button variant="outline" size="sm" asChild className="mt-2">
@@ -72,7 +69,6 @@ export default function LoginPage() {
         <h1 className="text-2xl font-bold text-foreground">Login</h1>
       </div>
 
-      {/* Display API errors */}
       {login.error && (
         <ApiErrorDisplay
           error={login.error}
@@ -119,7 +115,7 @@ export default function LoginPage() {
                       type="button"
                       className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
                       onClick={togglePasswordVisibility}
-                      tabIndex={-1} // Remove from tab navigation
+                      tabIndex={-1}
                       aria-label={
                         showPassword ? "Hide password" : "Show password"
                       }
@@ -137,27 +133,34 @@ export default function LoginPage() {
             )}
           />
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="remember"
-                checked={rememberMe}
-                onCheckedChange={(checked) => setRememberMe(!!checked)}
-              />
-              <label
-                htmlFor="remember"
-                className="text-sm text-muted-foreground cursor-pointer"
-              >
-                Remember me
-              </label>
-            </div>
-            <Link
-              href="/forgot-password"
-              className="text-sm text-primary hover:underline"
-            >
-              Forgot password?
-            </Link>
-          </div>
+          <FormField
+            control={form.control}
+            name="rememberMe"
+            render={({ field }) => (
+              <FormItem>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <FormLabel className="text-sm text-muted-foreground cursor-pointer">
+                      Remember me (30 days)
+                    </FormLabel>
+                  </div>
+                  <Link
+                    href="/forgot-password"
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           <Button
             type="submit"

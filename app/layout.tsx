@@ -9,6 +9,7 @@ import { ErrorProvider } from "@/providers/error-providers";
 import { ThemeProvider } from "@/providers/theme-provider";
 import SessionExpiredAlert from "@/components/SessionExpiredAlert";
 import { ReactionProvider } from "@/contexts/ReactionContext";
+import { AuthProvider } from "@/providers/auth-proivder";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -46,9 +47,11 @@ export default function RootLayout({
               <ErrorProvider>
                 <SocketProvider>
                   <ReactionProvider>
-                    {children}
-                    <Toaster richColors position="top-right" />
-                    <SessionExpiredAlert />
+                    <AuthProvider>
+                      {children}
+                      <Toaster richColors position="top-right" />
+                      <SessionExpiredAlert />
+                    </AuthProvider>
                   </ReactionProvider>
                 </SocketProvider>
               </ErrorProvider>
