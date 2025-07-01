@@ -8,7 +8,12 @@ import {
   ReactNode,
 } from "react";
 import { Socket } from "socket.io-client";
-import { connectSocket, disconnectSocket, getSocket } from "@/lib/socket";
+import {
+  connectSocket,
+  disconnectSocket,
+  getSocket,
+  reconnectSocket,
+} from "@/lib/socket";
 import { useAuthStore } from "@/store/auth-store";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
@@ -34,22 +39,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, token, actions } = useAuthStore();
   const router = useRouter();
 
-  // Function to reconnect socket with fresh token
   const reconnect = () => {
-    if (isAuthenticated) {
-      const currentToken = useAuthStore.getState().token;
-
-      // Only attempt reconnection if token is valid
-      if (currentToken && !isTokenExpired(currentToken)) {
-        if (getSocket()) {
-          disconnectSocket();
-        }
-
-        const socketInstance = connectSocket();
-        setSocket(socketInstance);
-
-        // No need to re-add event listeners as they'll be set in the main effect
-      }
+    if (isAuthenticated && token) {
+      reconnectSocket();
     }
   };
 
@@ -88,19 +80,16 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     function onConnectError(err: Error) {
       console.error("Socket connection error:", err.message);
 
-      // Check for authentication errors
+      // Don't logout immediately - let API interceptor handle token refresh
       if (
         err.message.includes("Authentication") ||
-        err.message.includes("Unauthorized") ||
-        err.message.includes("auth") ||
         err.message.includes("token")
       ) {
-        console.error(
-          "Authentication error in socket connection. Logging out user.",
-        );
-        actions.logout();
-        Cookies.remove("token");
-        router.push("/login");
+        console.warn("Socket auth error - will retry with fresh token");
+        // Just disconnect, don't logout
+        disconnectSocket();
+        setSocket(null);
+        setIsConnected(false);
       }
     }
 
@@ -127,7 +116,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     socketInstance.on("disconnect", onDisconnect);
     socketInstance.on("connect_error", onConnectError);
     socketInstance.on("attachment_status_update", onAttachmentStatusUpdate);
-    socketInstance.on("attachment_processing_complete", onAttachmentProcessingComplete);
+    socketInstance.on(
+      "attachment_processing_complete",
+      onAttachmentProcessingComplete,
+    );
 
     setIsConnected(socketInstance.connected);
 
@@ -136,7 +128,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       socketInstance.off("disconnect", onDisconnect);
       socketInstance.off("connect_error", onConnectError);
       socketInstance.off("attachment_status_update", onAttachmentStatusUpdate);
-      socketInstance.off("attachment_processing_complete", onAttachmentProcessingComplete);
+      socketInstance.off(
+        "attachment_processing_complete",
+        onAttachmentProcessingComplete,
+      );
     };
   }, [isAuthenticated, token, actions, router]);
 

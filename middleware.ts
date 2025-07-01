@@ -12,59 +12,49 @@ const protectedRoutes = ["/chat"];
 
 const isTokenExpired = (token: string): boolean => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const decoded: any = jwtDecode(token);
-
-    // Check if token has expiration (exp) claim
     if (!decoded.exp) return false;
-
-    // exp is in seconds, Date.now() is in milliseconds
     const currentTime = Date.now() / 1000;
     return decoded.exp < currentTime;
   } catch (error) {
     console.error("Error decoding token:", error);
-    return true; // If we can't decode it, treat as expired
+    return true;
   }
 };
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Try to get token from cookie
   const token = request.cookies.get("token")?.value;
-
-  // Alternative check: Get token from authorization header
-  const authHeader = request.headers.get("authorization");
-  const headerToken = authHeader?.startsWith("Bearer ")
-    ? authHeader.substring(7)
-    : null;
+  const refreshToken = request.cookies.get("refreshToken")?.value;
 
   let isAuthenticated = false;
 
-  // Check if we have a token and if it's not expired
-  if (token || headerToken) {
-    const tokenToCheck = token || headerToken;
-    if (tokenToCheck && !isTokenExpired(tokenToCheck)) {
-      isAuthenticated = true;
-    } else if (token && isTokenExpired(token)) {
-      // Token is expired, delete it and redirect to login
-      const response = NextResponse.redirect(new URL("/login", request.url));
-      response.cookies.delete("token");
-      return response;
-    }
+  // Check authentication status
+  if (token && !isTokenExpired(token)) {
+    isAuthenticated = true;
+  } else if (token && isTokenExpired(token) && !refreshToken) {
+    // Token expired and no refresh token - clean up and redirect
+    const response = NextResponse.redirect(new URL("/login", request.url));
+    response.cookies.delete("token");
+    response.cookies.delete("refreshToken");
+    return response;
+  } else if (refreshToken) {
+    // We have refresh token, let the client handle token refresh
+    isAuthenticated = true;
   }
 
-  // If authenticated and trying to access auth routes (login, register, etc.)
+  // Redirect authenticated users away from auth pages
   if (isAuthenticated && authRoutes.includes(pathname)) {
     return NextResponse.redirect(new URL("/chat", request.url));
   }
 
-  // If authenticated and at root, redirect to /chat
+  // Redirect authenticated users from root to chat
   if (isAuthenticated && pathname === "/") {
     return NextResponse.redirect(new URL("/chat", request.url));
   }
 
-  // If not authenticated and trying to access protected routes
+  // Protect routes that require authentication
   if (
     !isAuthenticated &&
     (protectedRoutes.some((route) => pathname.startsWith(route)) ||

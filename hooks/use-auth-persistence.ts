@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/auth-store";
 import { api } from "@/lib/api";
 import Cookies from "js-cookie";
 import { jwtDecode } from "jwt-decode";
+import { reconnectSocket } from "@/lib/socket";
 
 export const isTokenExpired = (token: string): boolean => {
   try {
@@ -100,5 +101,64 @@ export function useAuthPersistence() {
     validateSession();
   }, []);
 
+  // Trigger socket reconnection when token changes
+  useEffect(() => {
+    if (token && isAuthenticated) {
+      // Small delay to ensure token is updated everywhere
+      setTimeout(() => {
+        reconnectSocket();
+      }, 100);
+    }
+  }, [token]);
+
+  // Auto-refresh token when it's about to expire
+  useEffect(() => {
+    if (!token || !isAuthenticated) return;
+
+    const checkTokenExpiry = () => {
+      const timeRemaining = getTokenRemainingTime(token);
+
+      // Auto-refresh when 5 minutes remaining
+      if (timeRemaining < 300 && timeRemaining > 0) {
+        const currentRefreshToken = Cookies.get("refreshToken");
+        if (currentRefreshToken) {
+          console.log("Auto-refreshing token...");
+          // Trigger refresh via API interceptor by making a request
+          api.get("/auth/me").catch(() => {
+            // If this fails, the interceptor will handle token refresh
+          });
+        }
+      }
+
+      // Token expired, cleanup
+      if (timeRemaining <= 0) {
+        const currentRefreshToken = Cookies.get("refreshToken");
+        if (!currentRefreshToken) {
+          actions.logout();
+          Cookies.remove("token");
+          Cookies.remove("refreshToken");
+        }
+      }
+    };
+
+    // Check immediately and then every minute
+    checkTokenExpiry();
+    const interval = setInterval(checkTokenExpiry, 60000);
+
+    return () => clearInterval(interval);
+  }, [token, isAuthenticated, actions]);
+
   return { isAuthenticated };
+}
+
+export function getTokenRemainingTime(token: string): number {
+  try {
+    const decoded: any = jwtDecode(token);
+    if (!decoded.exp) return Infinity;
+    const currentTime = Date.now() / 1000;
+    return Math.max(0, decoded.exp - currentTime);
+  } catch (error) {
+    console.error("Error decoding token:", error);
+    return 0;
+  }
 }
