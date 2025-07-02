@@ -24,30 +24,89 @@ export function useAuthPersistence() {
 
   // Session restoration on app load
   useEffect(() => {
-    const restoreSession = () => {
-      const cookieToken = Cookies.get("token");
-      const cookieRefreshToken = Cookies.get("refreshToken");
-      
-      // If we have cookies but no Zustand state, restore from cookies
-      if (cookieToken && !token) {
-        if (!isTokenExpired(cookieToken)) {
-          actions.setToken(cookieToken);
-          api.defaults.headers.common["Authorization"] = `Bearer ${cookieToken}`;
-        } else {
-          // Clean up expired tokens
-          Cookies.remove("token");
-          Cookies.remove("refreshToken");
-          actions.logout();
-        }
-      }
-      
-      if (cookieRefreshToken && !refreshToken) {
-        actions.setRefreshToken(cookieRefreshToken);
-      }
-    };
+    const timer = setTimeout(() => {
+      const restoreSession = async () => {
+        const cookieToken = Cookies.get("token");
+        const cookieRefreshToken = Cookies.get("refreshToken");
 
-    restoreSession();
-  }, []);
+        // Skip if we already have valid token
+        if (token && !isTokenExpired(token)) return;
+
+        // If we have refresh token but no valid access token, try to refresh
+        if (
+          cookieRefreshToken &&
+          (!cookieToken || isTokenExpired(cookieToken))
+        ) {
+          try {
+            console.log("Restoring session with refresh token...");
+
+            // Set refresh token first if not already set
+            if (!refreshToken) {
+              actions.setRefreshToken(cookieRefreshToken);
+            }
+
+            const response = await fetch(
+              `${
+                process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001"
+              }/api/auth/refresh`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ refreshToken: cookieRefreshToken }),
+              },
+            );
+
+            if (response.ok) {
+              const data = await response.json();
+
+              const cookieOptions = {
+                path: "/",
+                sameSite: "lax" as const,
+                secure: process.env.NODE_ENV === "production",
+              };
+
+              Cookies.set("token", data.accessToken, {
+                ...cookieOptions,
+                expires: 1,
+              });
+              Cookies.set("refreshToken", data.refreshToken, {
+                ...cookieOptions,
+                expires: 30,
+              });
+
+              actions.updateTokens(data.accessToken, data.refreshToken);
+              api.defaults.headers.common[
+                "Authorization"
+              ] = `Bearer ${data.accessToken}`;
+
+              console.log("Session restored successfully");
+            } else {
+              throw new Error("Refresh failed");
+            }
+          } catch (error) {
+            console.error("Session restoration failed:", error);
+            Cookies.remove("token");
+            Cookies.remove("refreshToken");
+            actions.logout();
+          }
+        }
+        // Restore valid access token
+        else if (cookieToken && !token && !isTokenExpired(cookieToken)) {
+          actions.setToken(cookieToken);
+          api.defaults.headers.common[
+            "Authorization"
+          ] = `Bearer ${cookieToken}`;
+        }
+        // Restore refresh token
+        else if (cookieRefreshToken && !refreshToken) {
+          actions.setRefreshToken(cookieRefreshToken);
+        }
+      };
+
+      restoreSession();
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []); // Re-run when refreshToken changes from persist
 
   // Sync tokens with cookies
   useEffect(() => {
