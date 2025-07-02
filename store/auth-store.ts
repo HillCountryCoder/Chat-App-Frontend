@@ -6,10 +6,11 @@ import { User } from "@/types/user";
 interface AuthState {
   user: User | null;
   token: string | null;
-  refreshToken: string | null; // Add refresh token
+  refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  expiresIn: string | null; // Add expires in
+  expiresIn: string | null;
+  _hasHydrated: boolean; // Track hydration status
   sessionInfo: {
     loginTime: string | null;
     rememberMe: boolean;
@@ -20,6 +21,7 @@ interface AuthState {
     setToken: (token: string | null) => void;
     setRefreshToken: (refreshToken: string | null) => void;
     setSessionInfo: (info: Partial<AuthState["sessionInfo"]>) => void;
+    setHasHydrated: (state: boolean) => void;
     login: (
       user: User,
       accessToken: string,
@@ -41,6 +43,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       expiresIn: null,
+      _hasHydrated: false,
       sessionInfo: {
         loginTime: null,
         rememberMe: false,
@@ -64,6 +67,10 @@ export const useAuthStore = create<AuthState>()(
         setSessionInfo: (info) =>
           set((state) => {
             state.sessionInfo = { ...state.sessionInfo, ...info };
+          }),
+        setHasHydrated: (hasHydrated) =>
+          set((state) => {
+            state._hasHydrated = hasHydrated;
           }),
         login: (
           user,
@@ -114,6 +121,17 @@ export const useAuthStore = create<AuthState>()(
         expiresIn: state.expiresIn,
         sessionInfo: state.sessionInfo,
       }),
+      onRehydrateStorage: (state) => {
+        return (state, error) => {
+          if (error) {
+            console.log("Hydration error:", error);
+          } else {
+            console.log("Hydration completed");
+            // Mark hydration as complete
+            state?.actions.setHasHydrated(true);
+          }
+        };
+      },
     },
   ),
 );
