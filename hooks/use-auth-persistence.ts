@@ -20,75 +20,48 @@ export const isTokenExpired = (token: string): boolean => {
 };
 
 export function useAuthPersistence() {
-  const { token, refreshToken, isAuthenticated, _hasHydrated, actions } = useAuthStore();
+  const { token, refreshToken, isAuthenticated, _hasHydrated, actions } =
+    useAuthStore();
 
   // Session restoration ONLY after hydration
   useEffect(() => {
-    // Wait for Zustand to hydrate before attempting session restoration
-    if (!_hasHydrated) {
-      console.log("🔄 Waiting for hydration...");
-      return;
-    }
+    if (!_hasHydrated) return;
 
     const restoreSession = async () => {
-      console.log("🚀 Starting session restoration...");
-      console.log("📊 Current state:", { 
-        hasToken: !!token, 
-        hasRefreshToken: !!refreshToken, 
-        isAuthenticated,
-        tokenExpired: token ? isTokenExpired(token) : 'no token'
-      });
-
       const cookieToken = Cookies.get("token");
       const cookieRefreshToken = Cookies.get("refreshToken");
-      
-      console.log("🍪 Cookies:", { 
-        hasCookieToken: !!cookieToken, 
-        hasCookieRefreshToken: !!cookieRefreshToken,
-        cookieTokenExpired: cookieToken ? isTokenExpired(cookieToken) : 'no cookie token'
-      });
 
       // Check if we have a token in store that hasn't expired
       const hasNonExpiredToken = token && !isTokenExpired(token);
-      console.log("🕐 Has non-expired token:", hasNonExpiredToken);
-      
+
       // But we also need to check if it's actually valid (authenticated state)
       const shouldSkipRestoration = hasNonExpiredToken && isAuthenticated;
-      console.log("🔍 Should skip restoration:", shouldSkipRestoration);
 
       if (shouldSkipRestoration) {
-        console.log("✨ Already have valid authenticated token, skipping restoration");
         return;
-      }
-
-      // If we have a token but not authenticated, it might be stale
-      if (hasNonExpiredToken && !isAuthenticated) {
-        console.log("⚠️ Have token but not authenticated - token might be stale");
       }
 
       // If we have refresh token (either in store or cookies) and need to refresh
       const availableRefreshToken = refreshToken || cookieRefreshToken;
-      const needsRefresh = availableRefreshToken && (
-        !cookieToken || 
-        isTokenExpired(cookieToken) || 
-        (hasNonExpiredToken && !isAuthenticated) // Stale token case
-      );
-      
-      console.log("🔄 Needs refresh:", needsRefresh, { availableRefreshToken: !!availableRefreshToken });
-      
+      const needsRefresh =
+        availableRefreshToken &&
+        (!cookieToken ||
+          isTokenExpired(cookieToken) ||
+          (hasNonExpiredToken && !isAuthenticated)); // Stale token case
+
       if (needsRefresh) {
         const tokenToUse = refreshToken || cookieRefreshToken;
-        try {
-          console.log("🔄 Attempting token refresh...");
 
+        try {
           // Set refresh token first if not already set
           if (!refreshToken && cookieRefreshToken) {
-            console.log("📝 Setting refresh token in store");
             actions.setRefreshToken(cookieRefreshToken);
           }
 
           const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001"}/api/auth/refresh`,
+            `${
+              process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001"
+            }/api/auth/refresh`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -98,7 +71,6 @@ export function useAuthPersistence() {
 
           if (response.ok) {
             const data = await response.json();
-            console.log("✅ Token refresh successful");
 
             const cookieOptions = {
               path: "/",
@@ -118,22 +90,21 @@ export function useAuthPersistence() {
 
             // Update store
             actions.updateTokens(data.accessToken, data.refreshToken);
-            
+
             // Set user if returned
             if (data.user) {
               actions.setUser(data.user);
             }
 
             // Update API headers
-            api.defaults.headers.common["Authorization"] = `Bearer ${data.accessToken}`;
-
-            console.log("🎉 Session restored successfully");
+            api.defaults.headers.common[
+              "Authorization"
+            ] = `Bearer ${data.accessToken}`;
           } else {
-            console.error("❌ Token refresh failed:", response.status);
             throw new Error("Refresh failed");
           }
         } catch (error) {
-          console.error("💥 Session restoration failed:", error);
+          console.error("Session restoration failed:", error);
           Cookies.remove("token");
           Cookies.remove("refreshToken");
           actions.logout();
@@ -141,16 +112,12 @@ export function useAuthPersistence() {
       }
       // Restore valid access token if missing from store
       else if (cookieToken && !token && !isTokenExpired(cookieToken)) {
-        console.log("📝 Restoring valid token from cookies to store");
         actions.setToken(cookieToken);
         api.defaults.headers.common["Authorization"] = `Bearer ${cookieToken}`;
       }
       // Restore refresh token if missing from store
       else if (cookieRefreshToken && !refreshToken) {
-        console.log("📝 Restoring refresh token from cookies to store");
         actions.setRefreshToken(cookieRefreshToken);
-      } else {
-        console.log("ℹ️ No restoration needed");
       }
     };
 
@@ -162,7 +129,6 @@ export function useAuthPersistence() {
     if (token) {
       const cookieToken = Cookies.get("token");
       if (!cookieToken) {
-        console.log("🍪 Syncing token to cookies");
         Cookies.set("token", token, {
           expires: 1,
           path: "/",
@@ -179,7 +145,6 @@ export function useAuthPersistence() {
     if (refreshToken) {
       const cookieRefreshToken = Cookies.get("refreshToken");
       if (!cookieRefreshToken) {
-        console.log("🍪 Syncing refresh token to cookies");
         Cookies.set("refreshToken", refreshToken, {
           expires: 30,
           path: "/",
@@ -197,12 +162,10 @@ export function useAuthPersistence() {
     const validateSession = async () => {
       if (token && isAuthenticated) {
         try {
-          console.log("🔍 Validating session...");
           const response = await api.get("/auth/me");
           actions.setUser(response.data.user);
-          console.log("✅ Session validation successful");
         } catch (error) {
-          console.error("❌ Session validation failed", error);
+          console.error("Session validation failed", error);
           actions.logout();
           Cookies.remove("token");
           Cookies.remove("refreshToken");
@@ -216,7 +179,6 @@ export function useAuthPersistence() {
   // Trigger socket reconnection when token changes
   useEffect(() => {
     if (token && isAuthenticated) {
-      console.log("🔌 Reconnecting socket...");
       setTimeout(() => {
         reconnectSocket();
       }, 100);
@@ -234,7 +196,7 @@ export function useAuthPersistence() {
       if (timeRemaining < 300 && timeRemaining > 0) {
         const currentRefreshToken = Cookies.get("refreshToken");
         if (currentRefreshToken) {
-          console.log("⏰ Auto-refreshing token...");
+          // Trigger refresh via API interceptor by making a request
           api.get("/auth/me").catch(() => {
             // If this fails, the interceptor will handle token refresh
           });
@@ -245,7 +207,6 @@ export function useAuthPersistence() {
       if (timeRemaining <= 0) {
         const currentRefreshToken = Cookies.get("refreshToken");
         if (!currentRefreshToken) {
-          console.log("🧹 Cleaning up expired token");
           actions.logout();
           Cookies.remove("token");
           Cookies.remove("refreshToken");
