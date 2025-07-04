@@ -19,6 +19,14 @@ export const isTokenExpired = (token: string): boolean => {
   }
 };
 
+// Helper function to convert duration strings to cookie expiry days
+const getExpiryDays = (duration: string): number => {
+  if (duration === "15m") return 1 / 24 / 4; // 15 minutes in days (0.0104 days)
+  if (duration === "7d") return 7;
+  if (duration === "30d") return 30;
+  return 1; // Default fallback
+};
+
 export function useAuthPersistence() {
   const { token, refreshToken, isAuthenticated, _hasHydrated, actions } =
     useAuthStore();
@@ -78,14 +86,22 @@ export function useAuthPersistence() {
               secure: process.env.NODE_ENV === "production",
             };
 
-            // Update cookies
+            // Use proper expiry times from backend
+            const accessTokenExpiry = getExpiryDays(
+              data.accessTokenExpiresIn || "15m",
+            );
+            const refreshTokenExpiry = getExpiryDays(
+              data.refreshTokenExpiresIn || "7d",
+            );
+
+            // Update cookies with correct expiry times
             Cookies.set("token", data.accessToken, {
               ...cookieOptions,
-              expires: 1,
+              expires: accessTokenExpiry,
             });
             Cookies.set("refreshToken", data.refreshToken, {
               ...cookieOptions,
-              expires: 30,
+              expires: refreshTokenExpiry,
             });
 
             // Update store
@@ -129,8 +145,9 @@ export function useAuthPersistence() {
     if (token) {
       const cookieToken = Cookies.get("token");
       if (!cookieToken) {
+        // For syncing, use short expiry since we don't know the exact expiry
         Cookies.set("token", token, {
-          expires: 1,
+          expires: 1 / 24 / 4, // 15 minutes
           path: "/",
           sameSite: "lax",
           secure: process.env.NODE_ENV === "production",
@@ -145,8 +162,9 @@ export function useAuthPersistence() {
     if (refreshToken) {
       const cookieRefreshToken = Cookies.get("refreshToken");
       if (!cookieRefreshToken) {
+        // Default to 7 days for refresh token sync
         Cookies.set("refreshToken", refreshToken, {
-          expires: 30,
+          expires: 7,
           path: "/",
           sameSite: "lax",
           secure: process.env.NODE_ENV === "production",

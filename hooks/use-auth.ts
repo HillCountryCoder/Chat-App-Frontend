@@ -5,6 +5,14 @@ import { LoginFormData, RegisterFormData } from "@/lib/validators";
 import Cookies from "js-cookie";
 import { BaseError } from "@/lib/errors";
 
+// Helper function to convert duration strings to cookie expiry days
+const getExpiryDays = (duration: string): number => {
+  if (duration === "15m") return 1 / 24 / 4; // 15 minutes in days
+  if (duration === "7d") return 7;
+  if (duration === "30d") return 30;
+  return 1; // Default fallback
+};
+
 export function useLogin() {
   const { actions } = useAuthStore();
   const queryClient = useQueryClient();
@@ -22,7 +30,14 @@ export function useLogin() {
       }
     },
     onSuccess: (data) => {
-      const { user, accessToken, refreshToken, expiresIn } = data;
+      const {
+        user,
+        accessToken,
+        refreshToken,
+        expiresIn,
+        accessTokenExpiresIn,
+        refreshTokenExpiresIn,
+      } = data;
 
       const cookieOptions = {
         path: "/",
@@ -30,14 +45,18 @@ export function useLogin() {
         secure: process.env.NODE_ENV === "production",
       };
 
-      // Store access token (short-lived - 15 minutes)
+      // Use proper expiry times from backend
+      const accessTokenExpiry = getExpiryDays(accessTokenExpiresIn || "15m");
+      const refreshTokenExpiry = getExpiryDays(
+        refreshTokenExpiresIn || expiresIn || "7d",
+      );
+
+      // Store tokens with correct expiry times
       Cookies.set("token", accessToken, {
         ...cookieOptions,
-        expires: 1, // 1 day (but token expires in 15 mins)
+        expires: accessTokenExpiry,
       });
 
-      // Store refresh token (duration based on rememberMe)
-      const refreshTokenExpiry = expiresIn === "30d" ? 30 : 7;
       Cookies.set("refreshToken", refreshToken, {
         ...cookieOptions,
         expires: refreshTokenExpiry,
@@ -49,7 +68,7 @@ export function useLogin() {
         accessToken,
         refreshToken,
         expiresIn,
-        expiresIn === "30d", // rememberMe = true if expiresIn is 30d
+        expiresIn === "30d",
       );
 
       queryClient.invalidateQueries({ queryKey: ["user"] });
@@ -74,7 +93,14 @@ export function useRegister() {
       }
     },
     onSuccess: (data) => {
-      const { user, accessToken, refreshToken, expiresIn } = data;
+      const {
+        user,
+        accessToken,
+        refreshToken,
+        expiresIn,
+        accessTokenExpiresIn,
+        refreshTokenExpiresIn,
+      } = data;
 
       const cookieOptions = {
         path: "/",
@@ -82,14 +108,18 @@ export function useRegister() {
         secure: process.env.NODE_ENV === "production",
       };
 
-      // Store access token
+      // Use proper expiry times from backend
+      const accessTokenExpiry = getExpiryDays(accessTokenExpiresIn || "15m");
+      const refreshTokenExpiry = getExpiryDays(
+        refreshTokenExpiresIn || expiresIn || "7d",
+      );
+
+      // Store tokens with correct expiry times
       Cookies.set("token", accessToken, {
         ...cookieOptions,
-        expires: 1,
+        expires: accessTokenExpiry,
       });
 
-      // Store refresh token
-      const refreshTokenExpiry = expiresIn === "30d" ? 30 : 7;
       Cookies.set("refreshToken", refreshToken, {
         ...cookieOptions,
         expires: refreshTokenExpiry,
@@ -120,24 +150,44 @@ export function useLogout() {
         try {
           await apiClient.post("/auth/logout", { refreshToken });
         } catch (error) {
-          // If logout fails due to token issues, don't throw - we still want to clear local state
-          console.warn("Server logout failed (likely due to expired token):", error);
+          // Continue with logout even if server request fails
+          console.error("Server logout failed:", error);
         }
       }
       return true;
     },
     onSuccess: () => {
-      // Always clear local state regardless of server response
+      // Remove both tokens
       Cookies.remove("token");
       Cookies.remove("refreshToken");
+
+      // Clear auth data from Zustand
       actions.logout();
+
+      // Clear any user-specific cached queries
       queryClient.clear();
     },
-    onError: () => {
-      // Even if the mutation "fails", still clear local state
+  });
+}
+
+export function useLogoutAll() {
+  const { actions } = useAuthStore();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      await apiClient.post("/auth/logout-all");
+      return true;
+    },
+    onSuccess: () => {
+      // Remove both tokens
       Cookies.remove("token");
       Cookies.remove("refreshToken");
+
+      // Clear auth data from Zustand
       actions.logout();
+
+      // Clear any user-specific cached queries
       queryClient.clear();
     },
   });
@@ -149,6 +199,17 @@ export function useUser() {
     queryFn: async () => {
       const { data } = await api.get("/auth/me");
       return data.user;
+    },
+    enabled: !!useAuthStore.getState().isAuthenticated,
+  });
+}
+
+export function useActiveSessions() {
+  return useQuery({
+    queryKey: ["active-sessions"],
+    queryFn: async () => {
+      const { data } = await api.get("/auth/sessions");
+      return data.sessions;
     },
     enabled: !!useAuthStore.getState().isAuthenticated,
   });
