@@ -32,10 +32,15 @@ const getTokenExpirationTime = (token: string): number => {
   }
 };
 
-const authRoutes = ["/login", "/register", "/forgot-password", "/reset-password"];
+const authRoutes = [
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+];
 
 export default function SessionExpiredAlert() {
-  const { token } = useAuthStore();
+  const { token, isAuthenticated } = useAuthStore();
   const logout = useLogout();
   const refreshToken = useTokenRefresh();
   const router = useRouter();
@@ -43,36 +48,80 @@ export default function SessionExpiredAlert() {
   const [open, setOpen] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [expirationTime, setExpirationTime] = useState<number>(0);
+  const [lastTokenValue, setLastTokenValue] = useState<string>("");
 
-  const shouldShowAlerts = !authRoutes.includes(pathname);
+  const shouldShowAlerts = !authRoutes.includes(pathname) && isAuthenticated;
+
+  // Reset alerts when token changes (successful refresh)
+  useEffect(() => {
+    if (token && token !== lastTokenValue) {
+      console.log("🔄 Token changed, resetting alerts");
+      setLastTokenValue(token);
+      setOpen(false);
+      setShowWarning(false);
+    }
+  }, [token, lastTokenValue]);
 
   useEffect(() => {
-    if (!token || !shouldShowAlerts) return;
+    if (!token || !shouldShowAlerts) {
+      setShowWarning(false);
+      setOpen(false);
+      return;
+    }
 
     const expTime = getTokenExpirationTime(token);
     setExpirationTime(expTime);
     const warningTime = expTime - 300 * 1000; // 5 minutes before
     const now = Date.now();
 
+    // Only show expired dialog if token is actually expired AND no refresh token available
     if (now >= expTime) {
-      setOpen(true);
+      const refreshTokenCookie = Cookies.get("refreshToken");
+      if (!refreshTokenCookie) {
+        console.log("🚨 Token expired and no refresh token available");
+        setOpen(true);
+        setShowWarning(false);
+      } else {
+        console.log(
+          "🔄 Token expired but refresh token available, letting API interceptor handle it",
+        );
+        // Don't show dialog immediately, let API interceptor try to refresh first
+      }
     } else if (now >= warningTime) {
+      console.log("⚠️ Showing warning - token expires soon");
       setShowWarning(true);
     }
 
     const intervalId = setInterval(() => {
       const currentTime = Date.now();
+      const refreshTokenCookie = Cookies.get("refreshToken");
+
       if (currentTime >= expTime) {
-        setOpen(true);
-        setShowWarning(false);
-        clearInterval(intervalId);
+        if (!refreshTokenCookie) {
+          console.log("🚨 Token expired and no refresh token available");
+          setOpen(true);
+          setShowWarning(false);
+          clearInterval(intervalId);
+        } else {
+          console.log("🔄 Token expired but refresh token available");
+          // Let the API interceptor handle refresh, but show warning
+          setShowWarning(false);
+        }
       } else if (currentTime >= warningTime) {
         setShowWarning(true);
       }
-    }, 30000);
+    }, 30000); // Check every 30 seconds
 
     return () => clearInterval(intervalId);
   }, [token, shouldShowAlerts]);
+
+  // Watch for logout/unauthenticated state
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setOpen(false);
+      setShowWarning(false);
+    }
+  }, [isAuthenticated]);
 
   const handleLogout = async () => {
     try {
@@ -93,11 +142,12 @@ export default function SessionExpiredAlert() {
 
   const handleStayLoggedIn = async () => {
     try {
+      console.log("🔄 Manual token refresh requested");
       await refreshToken.mutateAsync();
       setShowWarning(false);
-      console.log("Token refreshed successfully");
+      console.log("✅ Manual token refresh successful");
     } catch (error) {
-      console.error("Failed to refresh token:", error);
+      console.error("❌ Manual token refresh failed:", error);
       // If refresh fails, logout user
       handleLogout();
     }
@@ -142,17 +192,21 @@ export default function SessionExpiredAlert() {
 
   return (
     <>
-      {/* Session Expiration Alert */}
+      {/* Session Expiration Alert - Only shown when refresh is not possible */}
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Session Expired</AlertDialogTitle>
             <AlertDialogDescription>
-              Your session has expired. Please log in again to continue.
+              Your session has expired and could not be automatically renewed.
+              Please log in again to continue.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={handleLogout} disabled={logout.isPending}>
+            <AlertDialogAction
+              onClick={handleLogout}
+              disabled={logout.isPending}
+            >
               {logout.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -166,7 +220,7 @@ export default function SessionExpiredAlert() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Session Warning Alert */}
+      {/* Session Warning Alert - Shows 5 minutes before expiry */}
       {showWarning && (
         <div className="fixed bottom-4 right-4 z-50 max-w-md">
           <Alert className="border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
@@ -180,15 +234,18 @@ export default function SessionExpiredAlert() {
                     <Countdown
                       date={expirationTime}
                       renderer={countdownRenderer}
-                      onComplete={() => setOpen(true)}
+                      onComplete={() => {
+                        // Let the useEffect handle expiry logic
+                        setShowWarning(false);
+                      }}
                     />
                   </span>
-                  . Would you like to stay logged in?
+                  . Would you like to extend your session?
                 </p>
                 <div className="flex justify-end gap-2 mt-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={handleLogout}
                     disabled={logout.isPending}
                   >
@@ -211,10 +268,10 @@ export default function SessionExpiredAlert() {
                     {refreshToken.isPending ? (
                       <>
                         <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                        Refreshing...
+                        Extending...
                       </>
                     ) : (
-                      "Stay Logged In"
+                      "Extend Session"
                     )}
                   </Button>
                 </div>

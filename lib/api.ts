@@ -15,6 +15,14 @@ export const api = axios.create({
   },
 });
 
+// Helper function to convert duration strings to cookie expiry days
+const getExpiryDays = (duration: string): number => {
+  if (duration === "15m") return 1/24/4; // 15 minutes in days
+  if (duration === "7d") return 7;
+  if (duration === "30d") return 30;
+  return 1; // Default fallback
+};
+
 // Queue for failed requests during token refresh
 let isRefreshing = false;
 let failedQueue: Array<{
@@ -22,12 +30,12 @@ let failedQueue: Array<{
   reject: (reason?: any) => void;
 }> = [];
 
-const processQueue = (error: any = null) => {
+const processQueue = (error: any = null, token: string | null = null) => {
   failedQueue.forEach(({ resolve, reject }) => {
     if (error) {
       reject(error);
     } else {
-      resolve();
+      resolve(token);
     }
   });
 
@@ -53,7 +61,10 @@ api.interceptors.response.use(
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         })
-          .then(() => {
+          .then((token) => {
+            if (token) {
+              originalRequest.headers.Authorization = `Bearer ${token}`;
+            }
             return api(originalRequest);
           })
           .catch((err) => {
@@ -70,38 +81,66 @@ api.interceptors.response.use(
           throw new Error("No refresh token");
         }
 
+        console.log("🔄 API Interceptor: Attempting token refresh...");
+
         const response = await axios.post(`${API_URL}/api/auth/refresh`, {
           refreshToken,
         });
 
-        const { accessToken, refreshToken: newRefreshToken } = response.data;
+        const { 
+          accessToken, 
+          refreshToken: newRefreshToken,
+          accessTokenExpiresIn,
+          refreshTokenExpiresIn 
+        } = response.data;
 
-        // Update cookies and store
+        // Update cookies with proper expiry times
         const cookieOptions = {
           path: "/",
-          sameSite: "strict" as const,
+          sameSite: "lax" as const,
           secure: process.env.NODE_ENV === "production",
         };
 
-        Cookies.set("token", accessToken, { ...cookieOptions, expires: 1 });
+        const accessTokenExpiry = getExpiryDays(accessTokenExpiresIn || "15m");
+        const refreshTokenExpiry = getExpiryDays(refreshTokenExpiresIn || "7d");
+
+        Cookies.set("token", accessToken, { 
+          ...cookieOptions, 
+          expires: accessTokenExpiry 
+        });
         Cookies.set("refreshToken", newRefreshToken, {
           ...cookieOptions,
-          expires: 30,
+          expires: refreshTokenExpiry,
         });
 
-        useAuthStore
-          .getState()
-          .actions.updateTokens(accessToken, newRefreshToken);
+        // Update Zustand store
+        useAuthStore.getState().actions.updateTokens(accessToken, newRefreshToken);
 
-        processQueue(null);
+        console.log("✅ API Interceptor: Token refresh successful");
 
+        // Process the queue
+        processQueue(null, accessToken);
+
+        // Retry the original request
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return api(originalRequest);
+
       } catch (refreshError) {
-        processQueue(refreshError);
+        console.error("❌ API Interceptor: Token refresh failed:", refreshError);
+        
+        // Process queue with error
+        processQueue(refreshError, null);
+        
+        // Clear auth data
         useAuthStore.getState().actions.logout();
         Cookies.remove("token");
         Cookies.remove("refreshToken");
-        window.location.href = "/login";
+        
+        // Only redirect if not already on auth page
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = "/login";
+        }
+        
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

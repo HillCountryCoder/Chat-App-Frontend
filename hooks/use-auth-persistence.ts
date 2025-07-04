@@ -177,9 +177,7 @@ export function useAuthPersistence() {
           actions.setUser(response.data.user);
         } catch (error) {
           console.error("Session validation failed", error);
-          actions.logout();
-          Cookies.remove("token");
-          Cookies.remove("refreshToken");
+          // Don't logout here - let the API interceptor handle 401s
         }
       }
     };
@@ -195,42 +193,6 @@ export function useAuthPersistence() {
       }, 100);
     }
   }, [token, isAuthenticated]);
-
-  // Auto-refresh token when it's about to expire
-  useEffect(() => {
-    if (!token || !isAuthenticated) return;
-
-    const checkTokenExpiry = () => {
-      const timeRemaining = getTokenRemainingTime(token);
-
-      // Auto-refresh when 5 minutes remaining
-      if (timeRemaining < 300 && timeRemaining > 0) {
-        const currentRefreshToken = Cookies.get("refreshToken");
-        if (currentRefreshToken) {
-          // Trigger refresh via API interceptor by making a request
-          api.get("/auth/me").catch(() => {
-            // If this fails, the interceptor will handle token refresh
-          });
-        }
-      }
-
-      // Token expired, cleanup
-      if (timeRemaining <= 0) {
-        const currentRefreshToken = Cookies.get("refreshToken");
-        if (!currentRefreshToken) {
-          actions.logout();
-          Cookies.remove("token");
-          Cookies.remove("refreshToken");
-        }
-      }
-    };
-
-    // Check immediately and then every minute
-    checkTokenExpiry();
-    const interval = setInterval(checkTokenExpiry, 60000);
-
-    return () => clearInterval(interval);
-  }, [token, isAuthenticated, actions]);
 
   return { isAuthenticated, hasHydrated: _hasHydrated };
 }
