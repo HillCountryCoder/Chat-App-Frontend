@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import Cookies from "js-cookie";
 import { jwtDecode } from "jwt-decode";
 import { reconnectSocket } from "@/lib/socket";
+import { getExpiryDays } from "@/utils/date-utils";
 
 export const isTokenExpired = (token: string): boolean => {
   try {
@@ -17,14 +18,6 @@ export const isTokenExpired = (token: string): boolean => {
     console.error("Error decoding token:", error);
     return true;
   }
-};
-
-// Helper function to convert duration strings to cookie expiry days
-const getExpiryDays = (duration: string): number => {
-  if (duration === "15m") return 1 / 24 / 4; // 15 minutes in days (0.0104 days)
-  if (duration === "7d") return 7;
-  if (duration === "30d") return 30;
-  return 1; // Default fallback
 };
 
 export function useAuthPersistence() {

@@ -4,14 +4,7 @@ import { useAuthStore } from "@/store/auth-store";
 import { LoginFormData, RegisterFormData } from "@/lib/validators";
 import Cookies from "js-cookie";
 import { BaseError } from "@/lib/errors";
-
-// Helper function to convert duration strings to cookie expiry days
-const getExpiryDays = (duration: string): number => {
-  if (duration === "15m") return 1 / 24 / 4; // 15 minutes in days
-  if (duration === "7d") return 7;
-  if (duration === "30d") return 30;
-  return 1; // Default fallback
-};
+import { getExpiryDays } from "@/utils/date-utils";
 
 export function useLogin() {
   const { actions } = useAuthStore();
