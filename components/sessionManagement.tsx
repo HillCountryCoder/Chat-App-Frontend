@@ -87,7 +87,6 @@ const formatDate = (dateString: string) => {
 export default function SessionManagement() {
   const { data: sessions, isLoading, error } = useActiveSessions();
   const logoutAll = useLogoutAll();
-
   if (isLoading) {
     return (
       <Card>
@@ -164,8 +163,8 @@ export default function SessionManagement() {
                     <AlertDialogTitle>End All Sessions?</AlertDialogTitle>
                     <AlertDialogDescription>
                       This will log you out from all devices and browsers.
-                      You&apos;ll need to log in again on each device. This action
-                      cannot be undone.
+                      You&apos;ll need to log in again on each device. This
+                      action cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
