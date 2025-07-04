@@ -21,8 +21,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { ApiErrorDisplay } from "@/components/api-error";
 import { getPasswordStrength } from "@/utils/passwordStrength";
-import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
 import { ErrorCodes } from "@/lib/errors";
+import PasswordStrengthMeter from "@/components/passwordStrengthMeter";
 
 export default function RegisterPage() {
   const router = useRouter();

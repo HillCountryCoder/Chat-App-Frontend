@@ -7,9 +7,9 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import "./globals.css";
 import { ErrorProvider } from "@/providers/error-providers";
 import { ThemeProvider } from "@/providers/theme-provider";
-import SessionExpiredAlert from "@/components/SessionExpiredAlert";
 import { ReactionProvider } from "@/contexts/ReactionContext";
 import { AuthProvider } from "@/providers/auth-proivder";
+import SessionExpiredAlert from "@/components/sessionExpiredAlert";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
