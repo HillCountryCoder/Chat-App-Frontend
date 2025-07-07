@@ -9,7 +9,7 @@ import { ErrorProvider } from "@/providers/error-providers";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { ReactionProvider } from "@/contexts/ReactionContext";
 import { AuthProvider } from "@/providers/auth-proivder";
-import SessionExpiredAlert from "@/components/sessionExpiredAlert";
+import SessionExpiredAlert from "@/components/SessionExpiredAlert";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

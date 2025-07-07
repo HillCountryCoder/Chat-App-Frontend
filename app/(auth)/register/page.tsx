@@ -22,7 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ApiErrorDisplay } from "@/components/api-error";
 import { getPasswordStrength } from "@/utils/passwordStrength";
 import { ErrorCodes } from "@/lib/errors";
-import PasswordStrengthMeter from "@/components/passwordStrengthMeter";
+import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
 
 export default function RegisterPage() {
   const router = useRouter();
