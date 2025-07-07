@@ -31,7 +31,18 @@ import {
   Calendar,
   MapPin,
 } from "lucide-react";
+interface Session {
+  _id: string;
+  userAgent?: string;
+  deviceInfo?: string;
+  ipAddress?: string;
+  lastUsed?: string;
+}
 
+interface UserAgentInfo {
+  browser: string;
+  os: string;
+}
 const getDeviceIcon = (deviceInfo?: string) => {
   if (!deviceInfo) return <Globe className="h-4 w-4" />;
 
@@ -185,9 +196,11 @@ export default function SessionManagement() {
 
           {/* Sessions List */}
           <div className="space-y-3">
-            {sessions?.map((session, index) => {
-              const { browser, os } = parseUserAgent(session.userAgent);
-              const isCurrentSession = index === 0; // Assuming first session is current
+            {sessions?.map((session: Session, index: number) => {
+              const { browser, os }: UserAgentInfo = parseUserAgent(
+                session.userAgent,
+              );
+              const isCurrentSession: boolean = index === 0; // Assuming first session is current
 
               return (
                 <div

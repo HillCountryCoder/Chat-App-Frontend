@@ -44,13 +44,6 @@ interface AppearanceSettings {
   messageSpacing: string;
 }
 
-const fontSizes = [
-  { value: 12, label: "Small" },
-  { value: 14, label: "Medium" },
-  { value: 16, label: "Large" },
-  { value: 18, label: "Extra Large" },
-];
-
 const fontFamilies = [
   { value: "system", label: "System Default" },
   { value: "inter", label: "Inter" },

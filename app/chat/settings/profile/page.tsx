@@ -13,7 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -25,7 +24,6 @@ export default function ProfileSettingsPage() {
   const [formData, setFormData] = useState({
     username: user?.username || "",
     email: user?.email || "",
-    bio: user?.bio || "",
     displayName: user?.displayName || "",
   });
 
@@ -43,7 +41,6 @@ export default function ProfileSettingsPage() {
     setFormData({
       username: user?.username || "",
       email: user?.email || "",
-      bio: user?.bio || "",
       displayName: user?.displayName || "",
     });
     setIsEditing(false);
@@ -96,7 +93,7 @@ export default function ProfileSettingsPage() {
             {/* Avatar Section */}
             <div className="flex items-center space-x-4">
               <Avatar className="h-20 w-20">
-                <AvatarImage src={user?.avatar} alt={formData.username} />
+                <AvatarImage src={user?.avatarUrl} alt={formData.username} />
                 <AvatarFallback className="text-2xl">
                   {formData.username?.charAt(0).toUpperCase()}
                 </AvatarFallback>
@@ -163,23 +160,6 @@ export default function ProfileSettingsPage() {
                 />
                 <p className="text-xs text-muted-foreground">
                   Used for account recovery and notifications
-                </p>
-              </div>
-
-              {/* Bio */}
-              <div className="grid gap-2">
-                <Label htmlFor="bio">Bio</Label>
-                <Textarea
-                  id="bio"
-                  value={formData.bio}
-                  onChange={(e) => handleInputChange("bio", e.target.value)}
-                  disabled={!isEditing}
-                  placeholder="Tell others about yourself..."
-                  rows={3}
-                  maxLength={500}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {formData.bio.length}/500 characters
                 </p>
               </div>
             </div>
@@ -279,7 +259,7 @@ export default function ProfileSettingsPage() {
               <div>
                 <p className="text-sm font-medium">Online Status</p>
                 <p className="text-xs text-muted-foreground">
-                  Show when you're online
+                  Show when you&apos;re online
                 </p>
               </div>
               <Badge variant="secondary">Visible</Badge>
