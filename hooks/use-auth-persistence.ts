@@ -117,6 +117,7 @@ export function useAuthPersistence() {
           Cookies.remove("token");
           Cookies.remove("refreshToken");
           actions.logout();
+          window.location.href = "/login";
         }
       }
       // Restore valid access token if missing from store

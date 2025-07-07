@@ -44,7 +44,13 @@ export default function RegisterPage() {
 
   const onSubmit = async (data: RegisterFormData) => {
     try {
-      await register.mutateAsync(data);
+      // Include rememberMe in the registration data
+      const registrationData = {
+        ...data,
+        rememberMe,
+      };
+
+      await register.mutateAsync(registrationData);
       router.push("/chat");
     } catch (error) {
       // Error is handled by the mutation and will be available in register.error
@@ -205,7 +211,7 @@ export default function RegisterPage() {
                 htmlFor="remember"
                 className="text-sm text-muted-foreground cursor-pointer"
               >
-                Remember me
+                Keep me signed in for 30 days
               </label>
             </div>
           </div>
