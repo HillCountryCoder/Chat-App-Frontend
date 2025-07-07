@@ -49,9 +49,6 @@ export default function ChatWindow({
   recipientId,
 }: ChatWindowProps) {
   const [newMessage, setNewMessage] = useState("");
-  const [messageReactions, setMessageReactions] = useState<
-    Record<string, Reaction[]>
-  >({});
   const [showFileUpload, setShowFileUpload] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { socket } = useSocket();
@@ -182,8 +179,7 @@ export default function ChatWindow({
     };
   }, [socket, directMessageId]);
 
-  // Initialize message reactions
-  useEffect(() => {
+  const messageReactions = useMemo(() => {
     const reactionsMap: Record<string, Reaction[]> = {};
 
     messages.forEach((message) => {
@@ -192,9 +188,8 @@ export default function ChatWindow({
       }
     });
 
-    setMessageReactions(reactionsMap);
+    return reactionsMap;
   }, [messages]);
-
   // Listen for new messages via socket
   useEffect(() => {
     if (socket) {
@@ -226,10 +221,8 @@ export default function ChatWindow({
     }) => {
       console.log("Received reaction update in ChatWindow", data);
 
-      setMessageReactions((prev) => {
-        const newState = { ...prev };
-        newState[data.messageId] = [...data.reactions];
-        return newState;
+      queryClient.invalidateQueries({
+        queryKey: ["messages", "direct", directMessageId],
       });
     };
 
@@ -238,7 +231,7 @@ export default function ChatWindow({
     return () => {
       socket.off("message_reaction_updated", handleReactionUpdate);
     };
-  }, [socket]);
+  }, [socket, directMessageId, queryClient]);
   // Mark messages as read when entering the chat
   useEffect(() => {
     if (directMessageId) {
