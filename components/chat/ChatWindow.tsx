@@ -39,6 +39,8 @@ import { ContentType } from "@/types/chat";
 import type { Value } from "platejs";
 import { hasContent, valueToText, initialEditorValue } from "@/utils/rich-text";
 import { RichTextEditor } from "./RichTextEditor";
+import { PresenceAwareAvatar } from "@/components/presence/PresenceAwareAvatar";
+import { usePresenceIndicator } from "@/hooks/use-presence-indicator";
 interface ChatWindowProps {
   directMessageId: string;
   recipientId?: string;
@@ -65,6 +67,8 @@ export default function ChatWindow({
       children: [{ text: "" }],
     },
   ]);
+
+  const presenceIndicator = usePresenceIndicator(recipientId || "");
 
   const extractPlainTextFromRichContent = (richContent: any[]): string => {
     const extractText = (nodes: any[]): string => {
@@ -397,30 +401,17 @@ export default function ChatWindow({
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <div className="relative">
-              <Avatar>
-                <AvatarImage
-                  src={recipient?.avatarUrl || ""}
-                  alt={recipient?.displayName || ""}
-                />
-                <AvatarFallback>
-                  {recipient?.displayName?.charAt(0) || "?"}
-                </AvatarFallback>
-              </Avatar>
-              <div
-                className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${
-                  recipient?.status === "online"
-                    ? "bg-green-500"
-                    : "bg-gray-400"
-                }`}
-              ></div>
-            </div>
+            <PresenceAwareAvatar
+              userId={recipientId || ""}
+              src={recipient?.avatarUrl}
+              alt={recipient?.displayName}
+              fallback={recipient?.displayName?.charAt(0) || "?"}
+              size="lg"
+            />
             <div>
               <h2 className="font-medium">{recipient?.displayName}</h2>
               <p className="text-xs text-muted-foreground">
-                {recipient?.status === "online"
-                  ? "Active now"
-                  : `Last active ${formatLastActive(recipient?.lastSeen)}`}
+                {presenceIndicator.lastSeenText || "Status unknown"}
               </p>
             </div>
           </div>

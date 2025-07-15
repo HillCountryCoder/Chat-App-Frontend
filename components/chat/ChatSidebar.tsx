@@ -17,17 +17,25 @@ import {
   Hash,
   Volume2,
   Megaphone,
+  Users,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DirectMessage, ChannelType } from "@/types/chat";
 import { useUnreadCounts } from "@/hooks/use-unread";
 import UnreadBadge from "./UnreadBadge";
+import { PresenceAwareAvatar } from "@/components/presence/PresenceAwareAvatar";
+import {
+  OnlineUsersList,
+  OnlineUsersCount,
+} from "@/components/presence/OnlineUsersList";
+import { ConnectionStatus } from "@/components/presence/ConnectionStatus";
+import { useUserPresence } from "@/hooks/use-presence";
 
 export default function ChatSidebar() {
   const [shortcutsOpen, setShortcutsOpen] = useState(true);
   const [directMessagesOpen, setDirectMessagesOpen] = useState(true);
   const [channelsOpen, setChannelsOpen] = useState(true);
+  const [onlineUsersOpen, setOnlineUsersOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -39,9 +47,23 @@ export default function ChatSidebar() {
   const { data: channels = [], isLoading: loadingChannels } = useChannels();
   const { getDirectMessageUnreadCount, getChannelUnreadCount } =
     useUnreadCounts();
+
+  // Get user IDs for presence tracking
+  const dmUserIds =
+    (directMessages
+      ?.map((dm) => {
+        const otherUser = getOtherParticipant(dm);
+        return otherUser?._id;
+      })
+      .filter(Boolean) as string[]) || [];
+
+  const { presence: dmUsersPresence } = useUserPresence(dmUserIds);
+
   const toggleShortcuts = () => setShortcutsOpen(!shortcutsOpen);
   const toggleDirectMessages = () => setDirectMessagesOpen(!directMessagesOpen);
   const toggleChannels = () => setChannelsOpen(!channelsOpen);
+  const toggleOnlineUsers = () => setOnlineUsersOpen(!onlineUsersOpen);
+
   const dmUnreadTotal =
     directMessages?.reduce((total, dm) => {
       return total + getDirectMessageUnreadCount(dm._id);
@@ -83,6 +105,11 @@ export default function ChatSidebar() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-2">
+        {/* Connection Status */}
+        <div className="mb-4 px-2">
+          <ConnectionStatus variant="badge" />
+        </div>
+
         <div className="mb-2">
           <button
             className="flex items-center gap-2 p-2 w-full hover:bg-accent rounded-md"
@@ -125,6 +152,36 @@ export default function ChatSidebar() {
                 <Star size={18} />
                 <span className="text-sm">Starred</span>
               </Link>
+            </div>
+          )}
+        </div>
+
+        {/* Online Users section */}
+        <div className="mb-2">
+          <button
+            className="flex items-center gap-2 p-2 w-full hover:bg-accent rounded-md"
+            onClick={toggleOnlineUsers}
+          >
+            {onlineUsersOpen ? (
+              <ChevronDown size={16} />
+            ) : (
+              <ChevronRight size={16} />
+            )}
+            <span className="text-sm font-medium">Online</span>
+            <OnlineUsersCount limit={50} />
+          </button>
+
+          {onlineUsersOpen && (
+            <div className="ml-2 mt-2">
+              <OnlineUsersList
+                limit={20}
+                showHeader={false}
+                className="border-0 bg-transparent"
+                onUserClick={(userId) => {
+                  // Could implement starting a DM with clicked user
+                  console.log("Start DM with user:", userId);
+                }}
+              />
             </div>
           )}
         </div>
@@ -230,15 +287,15 @@ export default function ChatSidebar() {
                         pathname === `/chat/dm/${dm._id}` ? "bg-accent" : ""
                       }`}
                     >
-                      <Avatar className="h-6 w-6">
-                        <AvatarImage
-                          src={otherUser?.avatarUrl || ""}
-                          alt={otherUser?.displayName || "Unknown"}
-                        />
-                        <AvatarFallback className="text-xs">
-                          {otherUser?.displayName?.charAt(0) || "?"}
-                        </AvatarFallback>
-                      </Avatar>
+                      <PresenceAwareAvatar
+                        userId={otherUser?._id || ""}
+                        src={otherUser?.avatarUrl || ""}
+                        alt={otherUser?.displayName || "Unknown"}
+                        fallback={otherUser?.displayName?.charAt(0) || "?"}
+                        size="sm"
+                        showPresence={true}
+                        presenceSize="sm"
+                      />
                       <span className="text-sm truncate">
                         {otherUser?.displayName || "Unknown User"}
                       </span>

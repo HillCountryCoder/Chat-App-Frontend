@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useDirectMessages } from "@/hooks/use-chat";
 import { useDirectMessageUsers } from "@/hooks/use-direct-message-users";
 import { useChannels } from "@/hooks/use-channels";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Channel, DirectMessage, Message } from "@/types/chat";
 import { formatDistanceToNow } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,6 +16,8 @@ import { useUnreadCounts } from "@/hooks/use-unread";
 import UnreadBadge from "./UnreadBadge";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSocket } from "@/providers/socket-provider";
+import { PresenceAwareAvatar } from "@/components/presence/PresenceAwareAvatar";
+import { useUserPresence } from "@/hooks/use-presence";
 
 export default function ConversationList() {
   const {
@@ -40,6 +41,20 @@ export default function ConversationList() {
   const router = useRouter();
   const pathname = usePathname();
   const { user: currentUser } = useAuthStore();
+
+  // Get user IDs for presence tracking
+  const dmUserIds = useMemo(() => {
+    return (
+      (directMessages
+        ?.map((dm) => {
+          const otherUser = getOtherParticipant(dm);
+          return otherUser?._id;
+        })
+        .filter(Boolean) as string[]) || []
+    );
+  }, [directMessages, getOtherParticipant]);
+
+  const { presence: dmUsersPresence } = useUserPresence(dmUserIds);
 
   const handleSelectDM = (dmId: string) => {
     router.push(`/chat/dm/${dmId}`);
@@ -70,17 +85,24 @@ export default function ConversationList() {
   // Combine and sort all conversations by last activity
   const unifiedConversations = [
     // Map direct messages to a common format
-    ...directMessages.map((dm) => ({
-      id: dm._id,
-      type: "dm",
-      name: getOtherParticipant(dm)?.displayName || "Unknown",
-      lastActivity: new Date(dm.lastActivity),
-      avatar: getOtherParticipant(dm)?.avatarUrl,
-      preview: getLastMessagePreview(dm),
-      unreadCount: getDirectMessageUnreadCount(dm._id),
-      channelType: null,
-      originalData: dm,
-    })),
+    ...directMessages.map((dm) => {
+      const otherUser = getOtherParticipant(dm);
+      const userPresence = dmUsersPresence[otherUser?._id || ""];
+
+      return {
+        id: dm._id,
+        type: "dm",
+        name: otherUser?.displayName || "Unknown",
+        lastActivity: new Date(dm.lastActivity),
+        avatar: otherUser?.avatarUrl,
+        preview: getLastMessagePreview(dm),
+        unreadCount: getDirectMessageUnreadCount(dm._id),
+        channelType: null,
+        originalData: dm,
+        userId: otherUser?._id, // For presence tracking
+        userPresence,
+      };
+    }),
 
     // Map channels to the same format
     ...channels.map((channel) => ({
@@ -97,10 +119,14 @@ export default function ConversationList() {
       unreadCount: getChannelUnreadCount(channel._id),
       channelType: channel.type,
       originalData: channel,
+      userId: null,
+      userPresence: null,
     })),
   ].sort((a, b) => b.lastActivity.getTime() - a.lastActivity.getTime());
+
   const { socket } = useSocket();
   const queryClient = useQueryClient();
+
   useEffect(() => {
     if (!socket) return;
 
@@ -121,6 +147,7 @@ export default function ConversationList() {
       socket.off("new_channel_message", handleNewChannelMessage);
     };
   }, [socket, queryClient]);
+
   const isLoading = loadingDMs || loadingUsers || loadingChannels;
 
   if (isLoading) {
@@ -183,15 +210,14 @@ export default function ConversationList() {
           >
             <div className="flex items-center gap-3">
               {conversation.type === "dm" ? (
-                <Avatar>
-                  <AvatarImage
-                    src={conversation.avatar || ""}
-                    alt={conversation.name}
-                  />
-                  <AvatarFallback>
-                    {conversation.name?.charAt(0) || "?"}
-                  </AvatarFallback>
-                </Avatar>
+                <PresenceAwareAvatar
+                  userId={conversation.userId || ""}
+                  src={conversation.avatar || ""}
+                  alt={conversation.name}
+                  fallback={conversation.name?.charAt(0) || "?"}
+                  size="md"
+                  showPresence={true}
+                />
               ) : (
                 <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center text-primary">
                   <Hash className="h-5 w-5" />
@@ -213,7 +239,7 @@ export default function ConversationList() {
                   </p>
                 </div>
 
-                <div className="flex flex-col-reverse items-end  gap-2">
+                <div className="flex flex-col-reverse items-end gap-2">
                   {!isActive && conversation.unreadCount > 0 && (
                     <UnreadBadge count={conversation.unreadCount} />
                   )}

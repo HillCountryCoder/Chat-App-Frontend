@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Search, Settings } from "lucide-react";
 import { ModeToggle } from "../theme-toggle";
 import { NavUser } from "../NavUser";
-import { UserActivityStatus } from "./UserActvityStatus";
+import { UserActivityStatus } from "../presence/UserActivityStatus";
 
 export default function TopBar() {
   return (

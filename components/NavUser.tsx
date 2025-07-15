@@ -4,7 +4,6 @@
 import { useAuthStore } from "@/store/auth-store";
 import { useLogout } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +14,8 @@ import {
 import { LogOut, Settings, User } from "lucide-react";
 import { useUnreadCounts } from "@/hooks/use-unread";
 import UnreadBadge from "./chat/UnreadBadge";
+import { PresenceAwareAvatar } from "@/components/presence/PresenceAwareAvatar";
+import { StatusSelector } from "@/components/presence/StatusSelector";
 
 export function NavUser() {
   const { user } = useAuthStore();
@@ -34,19 +35,16 @@ export function NavUser() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild className="cursor-pointer">
           <button className="relative outline-none focus:ring-2 focus:ring-primary/50 rounded-full">
-            <Avatar>
-              {user?.avatarUrl && (
-                <AvatarImage
-                  src={user.avatarUrl}
-                  alt={user?.displayName || ""}
-                />
-              )}
-              <AvatarFallback>
-                {user?.displayName?.charAt(0) ||
-                  user?.username?.charAt(0) ||
-                  "?"}
-              </AvatarFallback>
-            </Avatar>
+            <PresenceAwareAvatar
+              userId={user?._id || ""}
+              src={user?.avatarUrl}
+              alt={user?.displayName || ""}
+              fallback={
+                user?.displayName?.charAt(0) || user?.username?.charAt(0) || "?"
+              }
+              size="md"
+              showPresence={true}
+            />
 
             {totalUnread > 0 && (
               <div className="absolute -top-1 -right-1">
@@ -57,23 +55,30 @@ export function NavUser() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <div className="flex items-center gap-2 p-2">
-            <Avatar className="h-8 w-8">
-              <AvatarImage
-                src={user?.avatarUrl || ""}
-                alt={user?.displayName || ""}
-              />
-              <AvatarFallback>
-                {user?.displayName?.charAt(0) ||
-                  user?.username?.charAt(0) ||
-                  "?"}
-              </AvatarFallback>
-            </Avatar>
+            <PresenceAwareAvatar
+              userId={user?._id || ""}
+              src={user?.avatarUrl || ""}
+              alt={user?.displayName || ""}
+              fallback={
+                user?.displayName?.charAt(0) || user?.username?.charAt(0) || "?"
+              }
+              size="sm"
+              showPresence={true}
+              presenceSize="sm"
+            />
             <div className="flex flex-col">
               <div className="font-medium">{user?.displayName}</div>
               <div className="text-xs text-muted-foreground">
                 @{user?.username}
               </div>
             </div>
+          </div>
+
+          <DropdownMenuSeparator />
+
+          {/* Status Selector */}
+          <div className="p-2">
+            <StatusSelector variant="default" className="w-full" />
           </div>
 
           <DropdownMenuSeparator />

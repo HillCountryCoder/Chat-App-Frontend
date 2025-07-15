@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import QueryProvider from "@/providers/query-provider";
 import { SocketProvider } from "@/providers/socket-provider";
+import { PresenceProvider } from "@/providers/presence-provider";
 import { Toaster } from "sonner";
 import { ErrorBoundary } from "@/components/error-boundary";
 import "./globals.css";
@@ -46,13 +47,15 @@ export default function RootLayout({
             <QueryProvider>
               <ErrorProvider>
                 <SocketProvider>
-                  <ReactionProvider>
-                    <AuthProvider>
-                      {children}
-                      <Toaster richColors position="top-right" />
-                      <SessionExpiredAlert />
-                    </AuthProvider>
-                  </ReactionProvider>
+                  <PresenceProvider>
+                    <ReactionProvider>
+                      <AuthProvider>
+                        {children}
+                        <Toaster richColors position="top-right" />
+                        <SessionExpiredAlert />
+                      </AuthProvider>
+                    </ReactionProvider>
+                  </PresenceProvider>
                 </SocketProvider>
               </ErrorProvider>
             </QueryProvider>
