@@ -32,13 +32,6 @@ export function useUserPresence(userIds: string[]) {
     return presence;
   }, [userIds, getUserPresence]);
 
-  // Trigger real-time fetch when userIds change
-  useEffect(() => {
-    if (userIds.length > 0) {
-      getBulkPresence(userIds);
-    }
-  }, [userIds.join(",")]);
-
   // Merge real-time and API data, preferring real-time
   const mergedPresence = useMemo(() => {
     return { ...apiPresence, ...realtimePresence };
@@ -141,11 +134,6 @@ export function useOnlineUsers(limit = 20) {
     apiOnlineUsers,
     isLoading,
   });
-
-  // Trigger real-time fetch
-  useEffect(() => {
-    getOnlineUsers(limit);
-  }, [getOnlineUsers, limit]);
 
   // Merge real-time and API data
   const mergedUsers = useMemo(() => {

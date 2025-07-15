@@ -9,6 +9,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Users, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { PRESENCE_STATUS } from "@/types/presence";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { User } from "@/types/user";
 
 interface OnlineUsersListProps {
   limit?: number;
@@ -96,31 +99,44 @@ export function OnlineUsersList({
     </div>
   );
 
-  const UserItem = ({ user }: { user: (typeof users)[0] }) => (
-    <div
-      className={cn(
-        "flex items-center gap-2 p-2 rounded-md hover:bg-accent transition-colors",
-        onUserClick && "cursor-pointer",
-      )}
-      onClick={() => onUserClick?.(user.userId)}
-    >
-      <PresenceAwareAvatar
-        userId={user.userId}
-        size="sm"
-        fallback={user.userId.charAt(0).toUpperCase()}
-        presenceSize="sm"
-      />
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium truncate">{user.userId}</div>
-        {user.deviceInfo?.type && (
-          <div className="text-xs text-muted-foreground">
-            {user.deviceInfo.type}
-          </div>
+  const UserItem = ({ user }: { user: (typeof users)[0] }) => {
+    const { data: userDetails } = useQuery({
+      queryKey: ["user", user.userId],
+      queryFn: async () => {
+        const { data } = await api.get(`/users/${user.userId}`);
+        return data as User;
+      },
+      staleTime: 300000, // 5 minutes
+    });
+    return (
+      <div
+        className={cn(
+          "flex items-center gap-2 p-2 rounded-md hover:bg-accent transition-colors",
+          onUserClick && "cursor-pointer",
         )}
+        onClick={() => onUserClick?.(user.userId)}
+      >
+        <PresenceAwareAvatar
+          userId={user.userId}
+          size="sm"
+          fallback={(userDetails?.displayName || user.userId)
+            .charAt(0)
+            .toUpperCase()}
+          presenceSize="sm"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium truncate">
+            {userDetails?.displayName || user.userId}
+          </div>
+          {user.deviceInfo?.type && (
+            <div className="text-xs text-muted-foreground">
+              {user.deviceInfo.type}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
-
+    );
+  };
   return (
     <div className={cn("bg-card border rounded-lg", className)}>
       {showHeader && <HeaderComponent />}
