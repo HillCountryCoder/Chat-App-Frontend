@@ -120,7 +120,22 @@ export function useMyPresence() {
 
 // Hook for online users list
 export function useOnlineUsers(limit = 20) {
-  const { getOnlineUsers, onlineUsers } = usePresence();
+  const { getOnlineUsers, onlineUsers, socket, isAuthenticated } =
+    usePresence();
+
+  console.log("🔍 Socket status:", {
+    hasSocket: !!socket,
+    isAuthenticated,
+    onlineUsersLength: onlineUsers.length,
+  });
+
+  // Force socket call on mount
+  useEffect(() => {
+    if (socket && isAuthenticated) {
+      console.log("🔍 Triggering socket getOnlineUsers");
+      getOnlineUsers(limit);
+    }
+  }, [socket, isAuthenticated, limit]);
   const queryClient = useQueryClient();
 
   const { data: apiOnlineUsers, isLoading } = useQuery({

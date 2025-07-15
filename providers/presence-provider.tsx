@@ -16,8 +16,10 @@ import {
 } from "@/types/presence";
 import { presenceApi } from "@/lib/presence-api";
 import { toast } from "sonner";
+import { Socket } from "socket.io-client";
 
 interface PresenceState {
+  socket: Socket | null;
   currentStatus: PRESENCE_STATUS;
   isConnected: boolean;
   lastHeartbeat: Date | null;
@@ -42,6 +44,7 @@ type PresenceAction =
     };
 
 const initialState: PresenceState = {
+  socket: null,
   currentStatus: PRESENCE_STATUS.OFFLINE,
   isConnected: false,
   lastHeartbeat: null,
@@ -101,6 +104,7 @@ function presenceReducer(
 
 interface PresenceContextType {
   // State
+  socket: Socket | null;
   currentStatus: PRESENCE_STATUS;
   isConnected: boolean;
   lastHeartbeat: Date | null;
@@ -363,6 +367,7 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
 
   const contextValue: PresenceContextType = {
     // State
+    socket: socket,
     currentStatus: state.currentStatus,
     isConnected: state.isConnected,
     lastHeartbeat: state.lastHeartbeat,
