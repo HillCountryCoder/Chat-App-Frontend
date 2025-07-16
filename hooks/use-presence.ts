@@ -8,9 +8,8 @@ import { useAuthStore } from "@/store/auth-store";
 
 // Hook for getting presence status of specific users
 export function useUserPresence(userIds: string[]) {
-  const { getBulkPresence, getUserPresence } = usePresence();
+  const { getUserPresence } = usePresence();
   const queryClient = useQueryClient();
-
   // Fetch presence via API as fallback
   const { data: apiPresence, isLoading } = useQuery({
     queryKey: ["presence", "bulk", userIds.sort()],
@@ -73,7 +72,6 @@ export function useUserPresence(userIds: string[]) {
 // Hook for a single user's presence
 export function useSingleUserPresence(userId: string) {
   const result = useUserPresence([userId]);
-
   return {
     presence: result.presence[userId] || null,
     status: result.getUserStatus(userId),
@@ -123,16 +121,9 @@ export function useOnlineUsers(limit = 20) {
   const { getOnlineUsers, onlineUsers, socket, isAuthenticated } =
     usePresence();
 
-  console.log("🔍 Socket status:", {
-    hasSocket: !!socket,
-    isAuthenticated,
-    onlineUsersLength: onlineUsers.length,
-  });
-
   // Force socket call on mount
   useEffect(() => {
     if (socket && isAuthenticated) {
-      console.log("🔍 Triggering socket getOnlineUsers");
       getOnlineUsers(limit);
     }
   }, [socket, isAuthenticated, limit]);
@@ -144,12 +135,6 @@ export function useOnlineUsers(limit = 20) {
     staleTime: 30000,
     refetchInterval: 60000,
   });
-  console.log("🔍 useOnlineUsers:", {
-    onlineUsers,
-    apiOnlineUsers,
-    isLoading,
-  });
-
   // Merge real-time and API data
   const mergedUsers = useMemo(() => {
     if (onlineUsers.length > 0) {

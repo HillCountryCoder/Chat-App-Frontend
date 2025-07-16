@@ -116,7 +116,8 @@ export function usePresenceIndicator(userId: string): PresenceIndicatorData {
   const { status, isOnline, lastSeen } = useSingleUserPresence(userId);
 
   return useMemo(() => {
-    return formatPresenceData(status, isOnline, lastSeen);
+    const result = formatPresenceData(status, isOnline, lastSeen);
+    return result;
   }, [status, isOnline, lastSeen]);
 }
 

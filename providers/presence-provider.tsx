@@ -149,7 +149,6 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
         if (response.success) {
           dispatch({ type: "SET_AUTHENTICATED", authenticated: true });
           dispatch({ type: "SET_STATUS", status: PRESENCE_STATUS.ONLINE });
-          console.log("✅ Presence authenticated successfully");
         } else {
           dispatch({
             type: "SET_CONNECTION_ERROR",
@@ -260,7 +259,7 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
         }
       });
     },
-    [socket?.connected, state.isAuthenticated],
+    [socket, state.isAuthenticated],
   );
 
   // Get online users

@@ -30,18 +30,6 @@ export function OnlineUsersList({
 }: OnlineUsersListProps) {
   const { users, isLoading, refetch } = useOnlineUsers(limit);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  // Group users by status for better organization
-  console.log("🔍 OnlineUsersList:", {
-    users,
-    isLoading,
-    usersLength: users.length,
-  });
-  const usersByStatus = users.reduce((acc, user) => {
-    const status = user.status || PRESENCE_STATUS.OFFLINE;
-    if (!acc[status]) acc[status] = [];
-    acc[status].push(user);
-    return acc;
-  }, {} as Record<PRESENCE_STATUS, typeof users>);
   const totalOnline = users.length;
 
   if (isLoading) {
@@ -108,6 +96,7 @@ export function OnlineUsersList({
       },
       staleTime: 300000, // 5 minutes
     });
+
     return (
       <div
         className={cn(
@@ -150,22 +139,7 @@ export function OnlineUsersList({
                 <p className="text-sm">No users online</p>
               </div>
             ) : (
-              <>
-                {/* Online users */}
-                {usersByStatus[PRESENCE_STATUS.ONLINE]?.map((user) => (
-                  <UserItem key={user.userId} user={user} />
-                ))}
-
-                {/* Away users */}
-                {usersByStatus[PRESENCE_STATUS.AWAY]?.map((user) => (
-                  <UserItem key={user.userId} user={user} />
-                ))}
-
-                {/* Busy users */}
-                {usersByStatus[PRESENCE_STATUS.BUSY]?.map((user) => (
-                  <UserItem key={user.userId} user={user} />
-                ))}
-              </>
+              users.map((user) => <UserItem key={user.userId} user={user} />)
             )}
           </div>
         </ScrollArea>
