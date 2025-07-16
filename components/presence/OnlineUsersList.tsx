@@ -19,6 +19,7 @@ interface OnlineUsersListProps {
   collapsible?: boolean;
   className?: string;
   onUserClick?: (userId: string) => void;
+  loadingUserId?: string | null;
 }
 
 export function OnlineUsersList({
@@ -27,14 +28,15 @@ export function OnlineUsersList({
   collapsible = true,
   className,
   onUserClick,
+  loadingUserId,
 }: OnlineUsersListProps) {
   const { users, isLoading, refetch } = useOnlineUsers(limit);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { user: currentUser } = useAuthStore();
-  const totalOnline = users.length;
   const filteredUsers = users.filter(
     (user) => user.userId !== currentUser?._id,
   );
+  const totalOnline = filteredUsers.length;
   if (isLoading) {
     return (
       <div className={cn("space-y-2", className)}>
@@ -99,14 +101,14 @@ export function OnlineUsersList({
       },
       staleTime: 300000, // 5 minutes
     });
-
+    const isLoading = loadingUserId === user.userId;
     return (
       <div
         className={cn(
           "flex items-center gap-2 p-2 rounded-md hover:bg-accent transition-colors",
           onUserClick && "cursor-pointer",
         )}
-        onClick={() => onUserClick?.(user.userId)}
+        onClick={() => !isLoading && onUserClick?.(user.userId)}
       >
         <PresenceAwareAvatar
           userId={user.userId}
@@ -126,6 +128,11 @@ export function OnlineUsersList({
             </div>
           )}
         </div>
+        {isLoading && (
+          <div className="ml-auto">
+            <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+          </div>
+        )}
       </div>
     );
   };
@@ -137,9 +144,16 @@ export function OnlineUsersList({
         <ScrollArea className="max-h-80">
           <div className="p-2 space-y-1">
             {totalOnline === 0 ? (
-              <div className="text-center py-4 text-muted-foreground">
-                <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No users online</p>
+              <div className="text-center py-8 text-muted-foreground">
+                <div className="flex flex-col items-center gap-2">
+                  <Users className="h-12 w-12 opacity-30" />
+                  <div>
+                    <p className="text-sm font-medium">No other users online</p>
+                    <p className="text-xs opacity-70">
+                      Other users will appear here when they come online
+                    </p>
+                  </div>
+                </div>
               </div>
             ) : (
               filteredUsers.map((user) => (

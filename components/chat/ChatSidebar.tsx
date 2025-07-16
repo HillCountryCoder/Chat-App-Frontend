@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { useDirectMessages } from "@/hooks/use-chat";
+import { useDirectMessages, useSendMessage } from "@/hooks/use-chat";
 import { useDirectMessageUsers } from "@/hooks/use-direct-message-users";
 import { useChannels } from "@/hooks/use-channels";
 import {
@@ -17,7 +17,6 @@ import {
   Hash,
   Volume2,
   Megaphone,
-  Users,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DirectMessage, ChannelType } from "@/types/chat";
@@ -30,6 +29,7 @@ import {
 } from "@/components/presence/OnlineUsersList";
 import { ConnectionStatus } from "@/components/presence/ConnectionStatus";
 import { useUserPresence } from "@/hooks/use-presence";
+import { toast } from "sonner";
 
 export default function ChatSidebar() {
   const [shortcutsOpen, setShortcutsOpen] = useState(true);
@@ -38,6 +38,44 @@ export default function ChatSidebar() {
   const [onlineUsersOpen, setOnlineUsersOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const sendMessage = useSendMessage();
+  const [creatingDmWithUser, setCreatingDmWithUser] = useState<string | null>(
+    null,
+  );
+
+  const handleUserClick = async (userId: string) => {
+    // Check if DM already exists with this user
+    const existingDM = directMessages?.find((dm) => {
+      const otherUser = getOtherParticipant(dm);
+      return otherUser?._id === userId;
+    });
+
+    if (existingDM) {
+      // Navigate to existing DM
+      router.push(`/chat/dm/${existingDM._id}`);
+      return;
+    }
+
+    // Create new DM by sending an initial message
+    setCreatingDmWithUser(userId);
+
+    try {
+      const response = await sendMessage.mutateAsync({
+        receiverId: userId,
+        content: "👋 Hi there!", // Initial message
+        contentType: "text",
+      });
+
+      // Navigate to the new conversation
+      router.push(`/chat/dm/${response.directMessage._id}`);
+      toast.success("Started new conversation");
+    } catch (error) {
+      console.error("Failed to start conversation:", error);
+      toast.error("Failed to start conversation");
+    } finally {
+      setCreatingDmWithUser(null);
+    }
+  };
 
   const { data: directMessages, isLoading: loadingDMs } = useDirectMessages();
   // Use our hook for DM users
@@ -177,10 +215,8 @@ export default function ChatSidebar() {
                 limit={20}
                 showHeader={false}
                 className="border-0 bg-transparent"
-                onUserClick={(userId) => {
-                  // Could implement starting a DM with clicked user
-                  console.log("Start DM with user:", userId);
-                }}
+                onUserClick={handleUserClick}
+                loadingUserId={creatingDmWithUser}
               />
             </div>
           )}
