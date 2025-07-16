@@ -127,6 +127,33 @@ export function useOnlineUsers(limit = 20) {
       getOnlineUsers(limit);
     }
   }, [socket, isAuthenticated, limit]);
+
+  // Listen for real-time updates
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleUserOnline = () => {
+      getOnlineUsers(limit);
+    };
+
+    const handleUserOffline = () => {
+      getOnlineUsers(limit);
+    };
+
+    const handleStatusChanged = () => {
+      getOnlineUsers(limit);
+    };
+
+    socket.on("user_online", handleUserOnline);
+    socket.on("user_offline", handleUserOffline);
+    socket.on("status_changed", handleStatusChanged);
+
+    return () => {
+      socket.off("user_online", handleUserOnline);
+      socket.off("user_offline", handleUserOffline);
+      socket.off("status_changed", handleStatusChanged);
+    };
+  }, [socket, limit, getOnlineUsers]);
   const queryClient = useQueryClient();
 
   const { data: apiOnlineUsers, isLoading } = useQuery({

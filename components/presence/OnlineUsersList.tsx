@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
-import { PRESENCE_STATUS } from "@/types/presence";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
