@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { User } from "@/types/user";
+import { useAuthStore } from "@/store/auth-store";
 
 interface OnlineUsersListProps {
   limit?: number;
@@ -29,8 +30,11 @@ export function OnlineUsersList({
 }: OnlineUsersListProps) {
   const { users, isLoading, refetch } = useOnlineUsers(limit);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { user: currentUser } = useAuthStore();
   const totalOnline = users.length;
-
+  const filteredUsers = users.filter(
+    (user) => user.userId !== currentUser?._id,
+  );
   if (isLoading) {
     return (
       <div className={cn("space-y-2", className)}>
@@ -138,7 +142,9 @@ export function OnlineUsersList({
                 <p className="text-sm">No users online</p>
               </div>
             ) : (
-              users.map((user) => <UserItem key={user.userId} user={user} />)
+              filteredUsers.map((user) => (
+                <UserItem key={user.userId} user={user} />
+              ))
             )}
           </div>
         </ScrollArea>
@@ -148,16 +154,18 @@ export function OnlineUsersList({
 }
 
 // Compact version for sidebars
-// In OnlineUsersList.tsx - update OnlineUsersCount
 export function OnlineUsersCount({ limit = 50 }: { limit?: number }) {
   const { users, isLoading } = useOnlineUsers(limit);
-  console.log("Online users :", users);
+  const { user: currentUser } = useAuthStore(); // Get current user
+
   if (isLoading) {
     return <Skeleton className="h-4 w-16" />;
   }
 
-  // Only count users with "online" status, not "away" or "busy"
-  const actuallyOnlineUsers = users.filter((user) => user.status === "online");
+  // Filter out current user and only count users with "online" status
+  const actuallyOnlineUsers = users.filter(
+    (user) => user.status === "online" && user.userId !== currentUser?._id,
+  );
 
   return (
     <div className="flex items-center gap-1 text-xs text-muted-foreground">
