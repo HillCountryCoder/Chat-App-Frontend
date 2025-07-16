@@ -145,18 +145,30 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
     try {
       dispatch({ type: "SET_CONNECTION_ERROR", error: null });
 
-      socket.emit("authenticate_presence", {}, (response: any) => {
-        if (response.success) {
-          dispatch({ type: "SET_AUTHENTICATED", authenticated: true });
-          dispatch({ type: "SET_STATUS", status: PRESENCE_STATUS.ONLINE });
-        } else {
-          dispatch({
-            type: "SET_CONNECTION_ERROR",
-            error: response.error || "Authentication failed",
-          });
-          console.error("❌ Presence authentication failed:", response.error);
-        }
-      });
+      socket.emit(
+        "authenticate_presence",
+        {
+          status:
+            state.currentStatus !== PRESENCE_STATUS.OFFLINE
+              ? state.currentStatus
+              : PRESENCE_STATUS.ONLINE,
+        },
+        (response: any) => {
+          if (response.success) {
+            dispatch({ type: "SET_AUTHENTICATED", authenticated: true });
+
+            if (state.currentStatus === PRESENCE_STATUS.OFFLINE) {
+              dispatch({ type: "SET_STATUS", status: PRESENCE_STATUS.ONLINE });
+            }
+          } else {
+            dispatch({
+              type: "SET_CONNECTION_ERROR",
+              error: response.error || "Authentication failed",
+            });
+            console.error("❌ Presence authentication failed:", response.error);
+          }
+        },
+      );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
