@@ -148,17 +148,21 @@ export function OnlineUsersList({
 }
 
 // Compact version for sidebars
+// In OnlineUsersList.tsx - update OnlineUsersCount
 export function OnlineUsersCount({ limit = 50 }: { limit?: number }) {
   const { users, isLoading } = useOnlineUsers(limit);
-
+  console.log("Online users :", users);
   if (isLoading) {
     return <Skeleton className="h-4 w-16" />;
   }
 
+  // Only count users with "online" status, not "away" or "busy"
+  const actuallyOnlineUsers = users.filter((user) => user.status === "online");
+
   return (
     <div className="flex items-center gap-1 text-xs text-muted-foreground">
       <div className="w-2 h-2 bg-green-500 rounded-full" />
-      <span>{users.length} online</span>
+      <span>{actuallyOnlineUsers.length} online</span>
     </div>
   );
 }
