@@ -3,7 +3,6 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useMessages, useSendMessage, useRecipient } from "@/hooks/use-chat";
 import { useSocket } from "@/providers/socket-provider";
 import { ContentTypeEnum, Message, Reaction } from "@/types/chat";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ChatMessage from "./ChatMessage";
@@ -333,28 +332,6 @@ export default function ChatWindow({
       d1.getMonth() === d2.getMonth() &&
       d1.getFullYear() === d2.getFullYear()
     );
-  };
-
-  // Format time (last active)
-  const formatLastActive = (dateString?: string) => {
-    if (!dateString) return "Unknown";
-
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMinutes = Math.floor(
-      (now.getTime() - date.getTime()) / (1000 * 60),
-    );
-
-    if (diffMinutes < 1) return "Just now";
-    if (diffMinutes < 60)
-      return `${diffMinutes} minute${diffMinutes > 1 ? "s" : ""} ago`;
-
-    const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours < 24)
-      return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
-
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
   };
 
   const isLoading = messagesLoading || recipientLoading;

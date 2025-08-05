@@ -76,6 +76,7 @@ export default function AppearanceSettingsPage() {
 
   const [hasChanges, setHasChanges] = useState(false);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateSetting = (key: keyof AppearanceSettings, value: any) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
     setHasChanges(true);

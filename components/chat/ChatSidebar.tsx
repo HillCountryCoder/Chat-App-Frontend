@@ -95,6 +95,7 @@ export default function ChatSidebar() {
       })
       .filter(Boolean) as string[]) || [];
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { presence: dmUsersPresence } = useUserPresence(dmUserIds);
 
   const toggleShortcuts = () => setShortcutsOpen(!shortcutsOpen);

@@ -23,6 +23,7 @@ import { useTokenRefresh } from "@/hooks/use-refresh-token";
 
 const getTokenExpirationTime = (token: string): number => {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const decoded: any = jwtDecode(token);
     if (!decoded.exp) return Infinity;
     return decoded.exp * 1000;
