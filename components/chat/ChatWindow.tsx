@@ -205,11 +205,25 @@ export default function ChatWindow({
           markDirectMessageAsRead.mutate(directMessageId);
         }
       };
+      // Add this new handler for message updates
+      const handleMessageUpdated = (data: {
+        message: Message;
+        directMessageId: string;
+      }) => {
+        console.log("Message updated in ChatWindow:", data);
+        if (data.directMessageId === directMessageId) {
+          queryClient.invalidateQueries({
+            queryKey: ["messages", "direct", directMessageId],
+          });
+        }
+      };
 
       socket.on("new_direct_message", handleNewMessage);
+      socket.on("message_updated", handleMessageUpdated);
 
       return () => {
         socket.off("new_direct_message", handleNewMessage);
+        socket.off("message_updated", handleMessageUpdated);
       };
     }
   }, [socket, directMessageId, queryClient, markDirectMessageAsRead]);
@@ -388,7 +402,7 @@ export default function ChatWindow({
             <div>
               <h2 className="font-medium">{recipient?.displayName}</h2>
               <p className="text-xs text-muted-foreground">
-                {presenceIndicator.lastSeenText || "Status unknown"}
+                {presenceIndicator.lastSeenText || ""}
               </p>
             </div>
           </div>

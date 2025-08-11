@@ -4,7 +4,14 @@ import { Attachment } from "@/types/attachment";
 import { useAuthStore } from "@/store/auth-store";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { Check, MoreVertical, Reply, SmilePlus, Type } from "lucide-react";
+import {
+  Check,
+  Loader2,
+  MoreVertical,
+  Reply,
+  SmilePlus,
+  Type,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { User } from "@/types/user";
@@ -16,6 +23,11 @@ import { useSocket } from "@/providers/socket-provider";
 import { Button } from "../ui/button";
 import { useReaction } from "@/hooks/use-reaction";
 import type { Value } from "platejs";
+import { Edit, Clock } from "lucide-react";
+import { useMessageEditing } from "@/hooks/use-message-editing";
+import { useEditMessage } from "@/hooks/use-chat";
+import RichTextEditor from "./RichTextEditor";
+import { hasContent } from "@/utils/rich-text";
 
 interface ChatMessageProps {
   message: Message & {
@@ -54,11 +66,32 @@ export default function ChatMessage({
     closeAllMenus,
   } = useReaction();
 
+  const {
+    editingMessageId,
+    editingContent,
+    editingRichContent,
+    editingMode,
+    startEditing,
+    cancelEditing,
+    setEditingContent,
+    setEditingRichContent,
+    toggleEditingMode,
+    canEditMessage,
+    hasChanges,
+    getTimeRemaining,
+    formatTimeRemaining,
+  } = useMessageEditing();
+
+  const editMessageMutation = useEditMessage();
+  const [isEditingSameMessage, setIsEditingSameMessage] = useState(false);
+  const isEditing = editingMessageId === message._id;
+  console.log("isEditing:", isEditing);
   const handleReply = () => {
     if (onReply) {
       onReply(message);
     }
   };
+
   const isActive = activeMessageId === message._id;
 
   const senderIdValue =
@@ -177,6 +210,58 @@ export default function ChatMessage({
     }
   };
 
+  const handleEditMessage = () => {
+    if (canEditMessage(message)) {
+      startEditing(message);
+      setIsEditingSameMessage(true);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!hasChanges()) {
+      cancelEditing();
+      return;
+    }
+
+    const content =
+      editingMode === "rich"
+        ? editingContent.trim() || "📎"
+        : editingContent.trim();
+
+    if (!content && editingMode === "text") return;
+    if (editingMode === "rich" && !hasContent(editingRichContent)) return;
+
+    try {
+      await editMessageMutation.mutateAsync({
+        messageId: message._id,
+        content,
+        richContent: editingMode === "rich" ? editingRichContent : undefined,
+        contentType: editingMode === "rich" ? "rich" : "text",
+        directMessageId: message.directMessageId,
+        channelId: message.channelId,
+      });
+
+      cancelEditing();
+      setIsEditingSameMessage(false);
+    } catch (error) {
+      console.error("Failed to save edit:", error);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    cancelEditing();
+    setIsEditingSameMessage(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      handleCancelEdit();
+    } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      handleSaveEdit();
+    }
+  };
+
   return (
     <div
       className={cn(
@@ -285,18 +370,78 @@ export default function ChatMessage({
                 </div>
               )}
 
-              {/* Text content - Enhanced with Rich Text Support */}
+              {/* Text content - Enhanced with Edit Mode Support */}
               {(hasTextContent || hasRichContent) && (
                 <div className={cn(isMediaOnlyMessage ? "p-4 pt-2" : "p-2")}>
-                  {hasRichContent ? (
-                    <RichTextRenderer
-                      content={message.richContent!}
-                      className="message-rich-content"
-                    />
+                  {isEditing ? (
+                    <div className="space-y-2" onKeyDown={handleKeyDown}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Button
+                          variant={editingMode === "text" ? "default" : "ghost"}
+                          size="sm"
+                          onClick={() =>
+                            editingMode === "rich" && toggleEditingMode()
+                          }
+                          disabled={editingMode === "text"}
+                        >
+                          Text
+                        </Button>
+                        <Button
+                          variant={editingMode === "rich" ? "default" : "ghost"}
+                          size="sm"
+                          onClick={() =>
+                            editingMode === "text" && toggleEditingMode()
+                          }
+                          disabled={editingMode === "rich"}
+                        >
+                          <Type className="h-4 w-4 mr-1" />
+                          Rich
+                        </Button>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {formatTimeRemaining(getTimeRemaining(message))}
+                        </div>
+                      </div>
+
+                      {editingMode === "rich" ? (
+                        <RichTextEditor
+                          value={editingRichContent}
+                          onChange={setEditingRichContent}
+                          placeholder="Edit your message..."
+                          autoFocus
+                          minHeight={60}
+                          maxHeight={200}
+                          submitOnEnter={false}
+                          className="border border-primary/20"
+                        />
+                      ) : (
+                        <textarea
+                          value={editingContent}
+                          onChange={(e) => setEditingContent(e.target.value)}
+                          placeholder="Edit your message..."
+                          autoFocus
+                          className="w-full min-h-[60px] max-h-[200px] p-2 border border-primary/20 rounded-md bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          style={{ resize: "none" }}
+                        />
+                      )}
+
+                      <div className="text-xs text-muted-foreground">
+                        Press Ctrl+Enter to save, Escape to cancel
+                      </div>
+                    </div>
                   ) : (
-                    <p className="break-words whitespace-pre-wrap">
-                      {message.content}
-                    </p>
+                    <>
+                      {hasRichContent ? (
+                        <RichTextRenderer
+                          content={message.richContent!}
+                          className="message-rich-content"
+                        />
+                      ) : (
+                        <p className="break-words whitespace-pre-wrap">
+                          {message.content}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -345,32 +490,75 @@ export default function ChatMessage({
           </div>
 
           {/* Message Actions */}
-          {showActions && (
+          {(showActions || isEditing) && (
             <div
               className={cn(
-                "flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity",
+                "flex items-center gap-1 transition-opacity",
+                showActions || isEditing
+                  ? "opacity-100"
+                  : "opacity-0 group-hover:opacity-100",
                 isOwnMessage ? "order-1" : "order-2",
               )}
             >
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={handleReply}
-              >
-                <Reply className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={toggleReactionMenu}
-              >
-                <SmilePlus className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
+              {!isEditing && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={handleReply}
+                  >
+                    <Reply className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={toggleReactionMenu}
+                  >
+                    <SmilePlus className="h-4 w-4" />
+                  </Button>
+                  {canEditMessage(message) && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={handleEditMessage}
+                      title={formatTimeRemaining(getTimeRemaining(message))}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+
+              {isEditing && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCancelEdit}
+                    disabled={editMessageMutation.isPending}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={handleSaveEdit}
+                    disabled={!hasChanges() || editMessageMutation.isPending}
+                  >
+                    {editMessageMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Save"
+                    )}
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -384,6 +572,9 @@ export default function ChatMessage({
             )}
           >
             <span>{formatTime(message.createdAt)}</span>
+            {message.isEdited && (
+              <span className="ml-1 text-muted-foreground">(edited)</span>
+            )}
             {isOwnMessage && (
               <div className="ml-1 flex items-center">
                 <Check className="h-3 w-3" />

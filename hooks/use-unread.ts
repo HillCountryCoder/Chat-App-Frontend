@@ -57,6 +57,34 @@ export function useUnreadCounts() {
     };
   }, [socket, queryClient]);
 
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleMessageUpdated = (data: {
+      message: any;
+      directMessageId?: string;
+      channelId?: string;
+    }) => {
+      console.log("Message updated:", data);
+
+      // Invalidate message queries to refresh the UI
+      if (data.directMessageId) {
+        queryClient.invalidateQueries({
+          queryKey: ["messages", "direct", data.directMessageId],
+        });
+      } else if (data.channelId) {
+        queryClient.invalidateQueries({
+          queryKey: ["messages", "channel", data.channelId],
+        });
+      }
+    };
+    socket.on("message_updated", handleMessageUpdated);
+
+    return () => {
+      socket.off("message_updated", handleMessageUpdated);
+    };
+  }, [socket, queryClient]);
+
   // Get the unread count for a specific direct message
   const getDirectMessageUnreadCount = (directMessageId: string): number => {
     if (data?.directMessages?.[directMessageId]) {

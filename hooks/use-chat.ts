@@ -211,6 +211,7 @@ export function useRichContentStats(
 
 // Hook for message editing (for future implementation)
 export function useEditMessage() {
+  const { socket } = useSocket();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -219,28 +220,86 @@ export function useEditMessage() {
       content,
       richContent,
       contentType,
+      directMessageId,
+      channelId,
     }: {
       messageId: string;
       content: string;
       richContent?: Value;
       contentType?: string;
+      directMessageId?: string;
+      channelId?: string;
     }) => {
-      const { data } = await api.put(`/messages/${messageId}`, {
-        content,
-        richContent,
-        contentType: richContent ? "rich" : contentType || "text",
+      console.log("Editing message:", {
+        messageId,
+        hasRichContent: !!richContent,
+        contentType,
+        directMessageId,
+        channelId,
       });
-      return data;
+
+      // If socket is connected, use socket for real-time updates
+      if (socket?.connected) {
+        return new Promise((resolve, reject) => {
+          const editData = {
+            messageId,
+            content,
+            richContent,
+            contentType: richContent ? "rich" : contentType || "text",
+            directMessageId,
+            channelId,
+          };
+
+          const eventName = directMessageId
+            ? "edit_direct_message"
+            : "edit_channel_message";
+
+          socket.emit(eventName, editData, (response: any) => {
+            if (response.success) {
+              resolve(response);
+            } else {
+              reject(new Error(response.error || "Failed to edit message"));
+            }
+          });
+        });
+      }
+      // Fallback to REST API if socket not connected
+      else {
+        const endpoint = directMessageId
+          ? `/direct-messages/${directMessageId}/messages/${messageId}`
+          : `/channels/${channelId}/messages/${messageId}`;
+
+        const editData = {
+          content,
+          richContent,
+          contentType: richContent ? "rich" : contentType || "text",
+        };
+
+        const { data } = await api.put(endpoint, editData);
+        return data;
+      }
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (data: any, variables) => {
       // Invalidate relevant message queries
-      queryClient.invalidateQueries({
-        queryKey: ["messages"],
-      });
+      if (variables.directMessageId) {
+        queryClient.invalidateQueries({
+          queryKey: ["messages", "direct", variables.directMessageId],
+        });
+      } else if (variables.channelId) {
+        queryClient.invalidateQueries({
+          queryKey: ["messages", "channel", variables.channelId],
+        });
+      }
 
       console.log("Message edited successfully:", {
         messageId: variables.messageId,
         hasRichContent: !!variables.richContent,
+      });
+    },
+    onError: (error, variables) => {
+      console.error("Failed to edit message:", {
+        error,
+        messageId: variables.messageId,
       });
     },
   });
