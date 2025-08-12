@@ -34,6 +34,7 @@ export interface Message {
   isEdited: boolean;
   reactions: Reaction[];
   replyToId?: string;
+  editedAt?: string;
   replyTo?: {
     _id: string;
     content: string;

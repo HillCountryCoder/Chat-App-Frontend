@@ -18,7 +18,6 @@ import { isSameDay } from "date-fns";
 import {
   PaperclipIcon,
   Send,
-  Loader2,
   Users,
   Phone,
   Video,
@@ -30,7 +29,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "../ui/skeleton";
 import ChannelMembersDrawer from "./ChannelMembersDrawer";
 import { useMarkAsRead } from "@/hooks/use-unread";
-
+import { Edit, Clock, Type, Loader2 } from "lucide-react";
+import { useMessageEditing } from "@/hooks/use-message-editing";
+import { useEditChannelMessage } from "@/hooks/use-channels"; // or wherever your channel hooks are
+import RichTextEditor from "./RichTextEditor";
+import { hasContent } from "@/utils/rich-text";
+import { ContentTypeEnum } from "@/types/chat";
+import { InlineRichTextRenderer } from "./RichTextRenderer";
 interface ChannelWindowProps {
   channelId: string;
 }
@@ -49,6 +54,13 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
     Record<string, Reaction[]>
   >({});
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [isRichTextMode, setIsRichTextMode] = useState(false);
+  const [richContent, setRichContent] = useState<any[]>([
+    {
+      type: "paragraph",
+      children: [{ text: "" }],
+    },
+  ]);
   // Update refs when their values change
   useEffect(() => {
     queryClientRef.current = queryClient;
@@ -99,6 +111,7 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
   }, [messages]);
 
   // Listen for new messages via socket
+  // Replace the existing handleMessageUpdated handler and socket listener
   useEffect(() => {
     if (!socket) return;
 
@@ -116,7 +129,21 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
       }
     };
 
+    // Fix: Change the event name from "channel_message_updated" to "message_updated"
+    const handleMessageUpdated = (data: {
+      message: Message;
+      channelId: string;
+    }) => {
+      console.log("Channel message updated:", data);
+      if (data.channelId === channelId) {
+        queryClientRef.current.invalidateQueries({
+          queryKey: ["messages", "channel", channelId],
+        });
+      }
+    };
+
     socket.on("new_channel_message", handleNewMessage);
+    socket.on("message_updated", handleMessageUpdated); // Fixed: was "channel_message_updated"
 
     // Join the channel room only once when component mounts
     socket.emit(
@@ -131,11 +158,12 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
 
     return () => {
       socket.off("new_channel_message", handleNewMessage);
+      socket.off("message_updated", handleMessageUpdated); // Fixed: was "channel_message_updated"
 
       // Leave the channel room when component unmounts
       socket.emit("leave_channel", { channelId });
     };
-  }, [socket, channelId]); // Only depend on socket and channelId
+  }, [socket, channelId]);
 
   useEffect(() => {
     if (!socket) return;
@@ -185,17 +213,43 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!newMessage.trim()) return;
+    // Determine content and type based on mode
+    let content: string;
+    let contentType: any;
+    let richContentData: any;
+
+    if (isRichTextMode) {
+      content = extractPlainTextFromRichContent(richContent);
+      contentType = ContentTypeEnum.RICH;
+      richContentData = richContent;
+
+      if (!hasContent(richContent)) return;
+    } else {
+      content = newMessage.trim();
+      contentType = ContentTypeEnum.TEXT;
+
+      if (!content) return;
+    }
 
     try {
       await sendMessageMutation.mutateAsync({
-        content: newMessage,
+        content: content || "📎",
         channelId,
         replyToId: replyingTo?._id,
+        // Add these if your channel message mutation supports rich content
+        richContent: richContentData,
+        contentType,
       });
 
+      // Clear both input types
       setNewMessage("");
-	  setReplyingTo(null);
+      setRichContent([
+        {
+          type: "paragraph",
+          children: [{ text: "" }],
+        },
+      ]);
+      setReplyingTo(null);
     } catch (error) {
       console.error("Failed to send message:", error);
     }
@@ -211,6 +265,40 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
 
   const cancelReply = () => {
     setReplyingTo(null);
+  };
+
+  const extractPlainTextFromRichContent = (richContent: any[]): string => {
+    const extractText = (nodes: any[]): string => {
+      return nodes
+        .map((node) => {
+          if (node.text !== undefined) {
+            return node.text;
+          }
+          if (node.children) {
+            return extractText(node.children);
+          }
+          return "";
+        })
+        .join("");
+    };
+
+    return extractText(richContent).trim();
+  };
+
+  const toggleRichTextMode = () => {
+    if (isRichTextMode) {
+      const plainText = extractPlainTextFromRichContent(richContent);
+      setNewMessage(plainText);
+      setIsRichTextMode(false);
+    } else {
+      setRichContent([
+        {
+          type: "paragraph",
+          children: [{ text: newMessage }],
+        },
+      ]);
+      setIsRichTextMode(true);
+    }
   };
 
   const isLoading = channelLoading || messagesLoading;
@@ -306,9 +394,18 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
                 ...message,
                 reactions,
               };
+              const reactionsKey = messageReactions[message._id]
+                ? messageReactions[message._id]
+                    .map((r) => `${r.emoji}-${r.count}`)
+                    .join("_")
+                : "no-reactions";
 
               return (
-                <Fragment key={message._id}>
+                <Fragment
+                  key={`${message._id}-${message.isEdited}-${
+                    message.editedAt || ""
+                  }-${reactionsKey}`}
+                >
                   {showDateSeparator && (
                     <MessageDate date={message.createdAt} />
                   )}
@@ -343,9 +440,17 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
                         : replyingTo.sender?.displayName || "Unknown"}
                     </span>
                   </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {replyingTo.content}
-                  </p>
+                  <div className="text-sm text-muted-foreground line-clamp-2">
+                    {replyingTo.contentType === ContentTypeEnum.RICH &&
+                    replyingTo.richContent ? (
+                      <InlineRichTextRenderer
+                        content={replyingTo.richContent}
+                        maxLength={80}
+                      />
+                    ) : (
+                      replyingTo.content
+                    )}
+                  </div>
                 </div>
               </div>
               <Button
@@ -359,22 +464,59 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
             </div>
           </div>
         )}
+
         <form onSubmit={handleSendMessage} className="flex gap-2">
           <Button type="button" size="icon" variant="ghost">
             <PaperclipIcon size={18} />
           </Button>
-          <Input
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
-            className="flex-1"
-            disabled={channel?.type === ChannelType.ANNOUNCEMENT}
-          />
+
+          <Button
+            type="button"
+            size="icon"
+            variant={isRichTextMode ? "default" : "ghost"}
+            onClick={toggleRichTextMode}
+            title={
+              isRichTextMode ? "Switch to plain text" : "Switch to rich text"
+            }
+          >
+            <Type size={18} />
+          </Button>
+
+          {isRichTextMode ? (
+            <div className="flex-1">
+              <RichTextEditor
+                value={richContent}
+                onChange={setRichContent}
+                placeholder="Type a message... Press Ctrl+Enter to send, Enter for new line"
+                submitOnEnter={false}
+                onSubmit={() => handleSendMessage(new Event("submit") as any)}
+                minHeight={40}
+                maxHeight={120}
+                className="border-0"
+              />
+            </div>
+          ) : (
+            <Input
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              placeholder="Type a message..."
+              className="flex-1"
+              disabled={channel?.type === ChannelType.ANNOUNCEMENT}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage(e);
+                }
+              }}
+            />
+          )}
+
           <Button
             type="submit"
             size="icon"
             disabled={
-              !newMessage.trim() ||
+              (!newMessage.trim() && !isRichTextMode) ||
+              (isRichTextMode && !hasContent(richContent)) ||
               sendMessageMutation.isPending ||
               channel?.type === ChannelType.ANNOUNCEMENT
             }

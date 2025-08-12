@@ -85,7 +85,6 @@ export default function ChatMessage({
   const editMessageMutation = useEditMessage();
   const [isEditingSameMessage, setIsEditingSameMessage] = useState(false);
   const isEditing = editingMessageId === message._id;
-  console.log("isEditing:", isEditing);
   const handleReply = () => {
     if (onReply) {
       onReply(message);

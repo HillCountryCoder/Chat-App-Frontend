@@ -3,6 +3,7 @@ import { api } from "@/lib/api";
 import { useSocket } from "@/providers/socket-provider";
 import { Channel, ChannelMember, Message } from "@/types/chat";
 import { useAuthStore } from "@/store/auth-store";
+import { Value } from "platejs";
 
 export function useChannels() {
   const { isAuthenticated } = useAuthStore();
@@ -56,14 +57,30 @@ export function useSendChannelMessage() {
   return useMutation({
     mutationFn: async (message: {
       content: string;
+      richContent?: Value;
+      contentType?: "text" | "rich" | "image" | "file" | "code" | "system";
       channelId: string;
       replyToId?: string;
       attachmentIds?: string[];
     }) => {
+      console.log("Sending channel message:", {
+        hasRichContent: !!message.richContent,
+        contentType: message.contentType,
+        contentLength: message.content.length,
+      });
+
       // If socket is connected, emit message through socket
       if (socket?.connected) {
         return new Promise((resolve, reject) => {
-          socket.emit("send_channel_message", message, (response: any) => {
+          const messageData = {
+            ...message,
+            // Ensure content type is set appropriately
+            contentType: message.richContent
+              ? "rich"
+              : message.contentType || "text",
+          };
+
+          socket.emit("send_channel_message", messageData, (response: any) => {
             if (response.success) {
               resolve(response);
             } else {
@@ -73,20 +90,38 @@ export function useSendChannelMessage() {
         });
       } else {
         // Fallback to REST API
+        const messageData = {
+          content: message.content,
+          richContent: message.richContent,
+          contentType: message.richContent
+            ? "rich"
+            : message.contentType || "text",
+          replyToId: message.replyToId,
+          attachmentIds: message.attachmentIds,
+        };
+
         const { data } = await api.post(
           `/channels/${message.channelId}/messages`,
-          {
-            content: message.content,
-	    replyToId: message.replyToId,
-	    attachmentIds: message.attachmentIds,
-          },
+          messageData,
         );
         return data;
       }
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data: any, variables) => {
+      console.log("Channel message sent successfully:", {
+        messageId: data.message?.messageId,
+        contentType: variables.contentType,
+      });
+
       queryClient.invalidateQueries({
         queryKey: ["messages", "channel", variables.channelId],
+      });
+    },
+    onError: (error, variables) => {
+      console.error("Failed to send channel message:", {
+        error,
+        contentType: variables.contentType,
+        hasRichContent: !!variables.richContent,
       });
     },
   });
@@ -154,6 +189,85 @@ export function useRemoveChannelMember() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["channel-members", variables.channelId],
+      });
+    },
+  });
+}
+
+export function useEditChannelMessage() {
+  const { socket } = useSocket();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      messageId,
+      content,
+      richContent,
+      contentType,
+      channelId,
+    }: {
+      messageId: string;
+      content: string;
+      richContent?: Value;
+      contentType?: string;
+      channelId: string;
+    }) => {
+      console.log("Editing channel message:", {
+        messageId,
+        hasRichContent: !!richContent,
+        contentType,
+        channelId,
+      });
+
+      // If socket is connected, use socket for real-time updates
+      if (socket?.connected) {
+        return new Promise((resolve, reject) => {
+          const editData = {
+            messageId,
+            content,
+            richContent,
+            contentType: richContent ? "rich" : contentType || "text",
+            channelId,
+          };
+
+          socket.emit("edit_channel_message", editData, (response: any) => {
+            if (response.success) {
+              resolve(response);
+            } else {
+              reject(new Error(response.error || "Failed to edit message"));
+            }
+          });
+        });
+      }
+      // Fallback to REST API if socket not connected
+      else {
+        const endpoint = `/channels/${channelId}/messages/${messageId}`;
+
+        const editData = {
+          content,
+          richContent,
+          contentType: richContent ? "rich" : contentType || "text",
+        };
+
+        const { data } = await api.put(endpoint, editData);
+        return data;
+      }
+    },
+    onSuccess: (data: any, variables) => {
+      // Invalidate channel message queries
+      queryClient.invalidateQueries({
+        queryKey: ["messages", "channel", variables.channelId],
+      });
+
+      console.log("Channel message edited successfully:", {
+        messageId: variables.messageId,
+        hasRichContent: !!variables.richContent,
+      });
+    },
+    onError: (error, variables) => {
+      console.error("Failed to edit channel message:", {
+        error,
+        messageId: variables.messageId,
       });
     },
   });
