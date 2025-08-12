@@ -24,6 +24,8 @@ interface AttachmentDisplayProps {
   isInMessage?: boolean;
   className?: string;
   onPreview?: (attachment: Attachment) => void;
+  compact?: boolean;
+  isOwnMessage?: boolean; // Add this prop
 }
 
 export default function AttachmentDisplay({
@@ -31,9 +33,11 @@ export default function AttachmentDisplay({
   isInMessage = true,
   className,
   onPreview,
+  compact = false,
+  isOwnMessage = false, // Add this prop
 }: AttachmentDisplayProps) {
   const { openPreview } = useAttachmentPreview();
-  
+
   if (attachments.length === 0) return null;
 
   const handlePreview = (attachment: Attachment) => {
@@ -50,26 +54,52 @@ export default function AttachmentDisplay({
     (a) => !a.type.startsWith("image/") && !a.type.startsWith("video/"),
   );
 
+  // Calculate max width based on content
+  const hasMedia = images.length > 0 || videos.length > 0;
+  const mediaMaxWidth = hasMedia ? "max-w-md" : "";
+  const documentMaxWidth = documents.length > 0 ? "max-w-sm" : "";
+
+  // Use the larger width as container width
+  const containerMaxWidth = hasMedia ? mediaMaxWidth : documentMaxWidth;
+
   return (
-    <div className={cn("space-y-2", className)}>
+    <div
+      className={cn(
+        "space-y-2 w-full flex flex-col",
+        isOwnMessage ? "items-end" : "items-start",
+        className,
+      )}
+    >
       {/* Combined media grid (images and videos together) */}
-      {(images.length > 0 || videos.length > 0) && (
-        <MediaGrid
-          media={[...images, ...videos]}
-          onPreview={handlePreview}
-          isInMessage={isInMessage}
-        />
+      {hasMedia && (
+        <div className={cn(containerMaxWidth, "w-full")}>
+          <MediaGrid
+            media={[...images, ...videos]}
+            onPreview={handlePreview}
+            isInMessage={isInMessage}
+            isOwnMessage={isOwnMessage}
+          />
+        </div>
       )}
 
       {/* Document list */}
       {documents.length > 0 && (
-        <div className="space-y-2">
+        <div
+          className={cn(
+            "space-y-2 w-full",
+            containerMaxWidth,
+            // If we have both media and documents, documents should match media width
+            hasMedia ? "max-w-md" : "max-w-sm",
+          )}
+        >
           {documents.map((doc) => (
             <DocumentAttachment
               key={doc._id}
               attachment={doc}
               onPreview={handlePreview}
               isInMessage={isInMessage}
+              compact={compact}
+              isOwnMessage={isOwnMessage}
             />
           ))}
         </div>
@@ -86,6 +116,7 @@ function MediaGrid({
   media: Attachment[];
   onPreview: (attachment: Attachment) => void;
   isInMessage: boolean;
+  isOwnMessage?: boolean;
 }) {
   const getGridClass = () => {
     switch (media.length) {
@@ -111,7 +142,6 @@ function MediaGrid({
 
   const getAspectRatio = (index: number) => {
     if (media.length === 1) {
-      // Single media item gets video aspect ratio for better display
       return "aspect-video max-h-80";
     }
     if (media.length === 3 && index === 0) {
@@ -123,9 +153,8 @@ function MediaGrid({
   return (
     <div
       className={cn(
-        "grid gap-0.5 overflow-hidden",
+        "grid gap-0.5 overflow-hidden w-full rounded-lg",
         getGridClass(),
-        // Remove border radius from container as it's handled per item
         isInMessage ? "max-w-md" : "max-w-lg",
       )}
     >
@@ -244,14 +273,16 @@ function MediaItem({
   );
 }
 
-function DocumentAttachment({
+export function DocumentAttachment({
   attachment,
   onPreview,
-  isInMessage,
+  compact = false,
 }: {
   attachment: Attachment;
   onPreview: (attachment: Attachment) => void;
   isInMessage: boolean;
+  compact?: boolean;
+  isOwnMessage?: boolean; // Add this prop
 }) {
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -282,23 +313,47 @@ function DocumentAttachment({
   return (
     <div
       className={cn(
-        "flex items-center gap-3 p-3 border rounded-lg bg-background hover:bg-accent/50 transition-colors",
+        "flex items-center gap-3 rounded-lg transition-colors w-full",
         canPreviewFile && "cursor-pointer",
-        isInMessage ? "max-w-md" : "max-w-lg",
+        // Compact mode for in-message display
+        compact
+          ? "p-2 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10"
+          : "p-3 border bg-background hover:bg-accent/50",
       )}
       onClick={canPreviewFile ? () => onPreview(attachment) : undefined}
     >
       {/* File icon */}
-      <div className="p-2 bg-muted rounded">
-        <FileIconComponent className="h-6 w-6 text-muted-foreground" />
+      <div
+        className={cn(
+          "bg-black/10 dark:bg-white/10 rounded flex items-center justify-center shrink-0",
+          compact ? "p-1.5" : "p-2",
+        )}
+      >
+        <FileIconComponent
+          className={cn(
+            "text-muted-foreground",
+            compact ? "h-4 w-4" : "h-6 w-6",
+          )}
+        />
       </div>
 
       {/* File info */}
       <div className="flex-1 min-w-0">
-        <p className="font-medium truncate" title={attachment.name}>
+        <p
+          className={cn(
+            "font-medium truncate",
+            compact ? "text-sm" : "text-base",
+          )}
+          title={attachment.name}
+        >
           {attachment.name}
         </p>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div
+          className={cn(
+            "flex items-center gap-2 text-muted-foreground",
+            compact ? "text-xs" : "text-sm",
+          )}
+        >
           <span>{FileUploadService.formatFileSize(attachment.size)}</span>
           {attachment.status !== "ready" && (
             <>
@@ -310,30 +365,34 @@ function DocumentAttachment({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 shrink-0">
         {canPreviewFile && (
           <Button
-            size="sm"
+            size={compact ? "sm" : "sm"}
             variant="ghost"
+            className={cn(compact && "h-6 w-6 p-0")}
             onClick={(e) => {
               e.stopPropagation();
               onPreview(attachment);
             }}
           >
-            <ExternalLink className="h-4 w-4" />
+            <ExternalLink className={cn(compact ? "h-3 w-3" : "h-4 w-4")} />
           </Button>
         )}
 
         <Button
-          size="sm"
+          size={compact ? "sm" : "sm"}
           variant="ghost"
+          className={cn(compact && "h-6 w-6 p-0")}
           onClick={handleDownload}
           disabled={isDownloading || attachment.status !== "ready"}
         >
           {isDownloading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2
+              className={cn("animate-spin", compact ? "h-3 w-3" : "h-4 w-4")}
+            />
           ) : (
-            <Download className="h-4 w-4" />
+            <Download className={cn(compact ? "h-3 w-3" : "h-4 w-4")} />
           )}
         </Button>
       </div>

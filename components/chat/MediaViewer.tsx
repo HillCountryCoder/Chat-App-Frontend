@@ -369,5 +369,5 @@ function TextFileViewer({
     );
   }
 
-  return <div className="font-mono text-sm whitespace-pre-wrap">{content}</div>;
+  return <div className="font-mono text-sm whitespace-pre-wrap text-black">{content}</div>;
 }

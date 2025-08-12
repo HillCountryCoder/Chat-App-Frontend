@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useMessages, useSendMessage, useRecipient } from "@/hooks/use-chat";

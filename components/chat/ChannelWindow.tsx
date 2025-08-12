@@ -1,7 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   useChannel,
   useChannelMessages,
@@ -36,6 +37,18 @@ import RichTextEditor from "./RichTextEditor";
 import { hasContent } from "@/utils/rich-text";
 import { ContentTypeEnum } from "@/types/chat";
 import { InlineRichTextRenderer } from "./RichTextRenderer";
+import FileUploadDropzone from "./FileUploadDropzone";
+import AttachmentPreview from "./AttachmentPreview";
+import MediaViewer from "./MediaViewer";
+import { Paperclip, Upload, AlertTriangle } from "lucide-react";
+import { useFileUpload } from "@/hooks/use-file-upload";
+import {
+  useAttachmentPreview,
+  useAttachmentStatusUpdates,
+} from "@/hooks/use-attachments";
+import { Attachment } from "@/types/attachment";
+import { cn } from "@/lib/utils";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 interface ChannelWindowProps {
   channelId: string;
 }
@@ -61,6 +74,48 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
       children: [{ text: "" }],
     },
   ]);
+  const [showFileUpload, setShowFileUpload] = useState(false);
+  const [previewAttachments, setPreviewAttachments] = useState<Attachment[]>(
+    [],
+  );
+
+  const {
+    pendingFiles,
+    uploadedAttachments,
+    isUploading,
+    addFiles,
+    removeFile,
+    removeAttachment,
+    removeFailedFiles,
+    clearAll,
+    retryFailedUploads,
+    retrySpecificFile,
+    getAttachmentIds,
+    isReadyToSend,
+    hasFailedUploads,
+    hasCompletedUploads,
+    getTotalCount,
+    canAddMoreFiles,
+    updateAttachmentStatus,
+    getFileCounts,
+    hasOnlyFailedFiles,
+  } = useFileUpload({
+    autoUpload: true,
+    onSuccess: (attachments) => {
+      console.log("Files uploaded successfully:", attachments);
+    },
+    onError: (error) => {
+      console.error("Upload error:", error);
+    },
+  });
+
+  const {
+    currentAttachment,
+    isOpen: isViewerOpen,
+    openPreview,
+    closePreview,
+  } = useAttachmentPreview();
+
   // Update refs when their values change
   useEffect(() => {
     queryClientRef.current = queryClient;
@@ -205,6 +260,27 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
     };
   }, [socket, channelId]);
 
+  const currentAttachmentIds = useMemo(() => {
+    return uploadedAttachments.map((a) => a._id);
+  }, [uploadedAttachments]);
+
+  const { statusUpdates } = useAttachmentStatusUpdates(currentAttachmentIds);
+
+  useEffect(() => {
+    Object.entries(statusUpdates).forEach(([attachmentId, update]) => {
+      const currentAttachment = uploadedAttachments.find(
+        (a) => a._id === attachmentId,
+      );
+
+      if (currentAttachment && currentAttachment.status !== update.status) {
+        console.log(
+          `Updating attachment ${attachmentId} status from ${currentAttachment.status} to ${update.status}`,
+        );
+        updateAttachmentStatus(attachmentId, update.status, update.metadata);
+      }
+    });
+  }, [statusUpdates, uploadedAttachments, updateAttachmentStatus]);
+
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -223,22 +299,24 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
       contentType = ContentTypeEnum.RICH;
       richContentData = richContent;
 
-      if (!hasContent(richContent)) return;
+      if (!hasContent(richContent) && getAttachmentIds().length === 0) return;
     } else {
       content = newMessage.trim();
       contentType = ContentTypeEnum.TEXT;
 
-      if (!content) return;
+      if (!content && getAttachmentIds().length === 0) return;
     }
+
+    if (!isReadyToSend()) return;
 
     try {
       await sendMessageMutation.mutateAsync({
         content: content || "📎",
         channelId,
         replyToId: replyingTo?._id,
-        // Add these if your channel message mutation supports rich content
         richContent: richContentData,
         contentType,
+        attachmentIds: getAttachmentIds(),
       });
 
       // Clear both input types
@@ -250,6 +328,7 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
         },
       ]);
       setReplyingTo(null);
+      clearAll();
     } catch (error) {
       console.error("Failed to send message:", error);
     }
@@ -300,6 +379,45 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
       setIsRichTextMode(true);
     }
   };
+  const handleFileUpload = (files: File[]) => {
+    addFiles(files);
+    setShowFileUpload(false);
+  };
+
+  const handlePreviewAttachment = (
+    attachment: Attachment,
+    attachments?: Attachment[],
+  ) => {
+    setPreviewAttachments(attachments || [attachment]);
+    openPreview(attachment);
+  };
+
+  // Update the canSendMessage logic
+  const canSendMessage = useMemo(() => {
+    // Check if we have text content based on current mode
+    const hasTextContent = isRichTextMode
+      ? hasContent(richContent)
+      : newMessage.trim();
+
+    // Check if we have attachments
+    const hasAttachments =
+      hasCompletedUploads || uploadedAttachments.length > 0;
+
+    // Can send if we have content OR attachments, and ready to send, and not pending
+    return (
+      (hasTextContent || hasAttachments) &&
+      isReadyToSend() &&
+      !sendMessageMutation.isPending
+    );
+  }, [
+    isRichTextMode,
+    richContent,
+    newMessage,
+    hasCompletedUploads,
+    uploadedAttachments.length,
+    isReadyToSend,
+    sendMessageMutation.isPending,
+  ]);
 
   const isLoading = channelLoading || messagesLoading;
 
@@ -412,6 +530,7 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
                   <ChatMessage
                     message={messageWithReactions}
                     onReply={handleReply}
+                    onPreviewAttachment={handlePreviewAttachment} // Add this line
                   />
                 </Fragment>
               );
@@ -421,8 +540,61 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="p-4 border-t border-border">
+      {/* File Upload Dropzone */}
+      {showFileUpload && (
+        <div className="absolute inset-0 z-50 bg-black/50 flex items-center justify-center p-8">
+          <div className="bg-background rounded-lg p-6 max-w-md w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-medium">Upload Files</h3>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowFileUpload(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <FileUploadDropzone
+              onFilesSelected={handleFileUpload}
+              currentFileCount={getTotalCount()}
+              disabled={!canAddMoreFiles}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Input Section */}
+      <div className="border-t border-border">
+        {hasFailedUploads && hasOnlyFailedFiles && (
+          <div className="p-4 pb-0">
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                All files failed to upload. Remove failed files or retry
+                uploading to send your message.
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
+
+        {/* Attachment Preview */}
+        {(pendingFiles.length > 0 || uploadedAttachments.length > 0) && (
+          <div className="p-4 border-b border-border">
+            <AttachmentPreview
+              pendingFiles={pendingFiles}
+              uploadedAttachments={uploadedAttachments}
+              onRemoveFile={removeFile}
+              onRemoveAttachment={removeAttachment}
+              onRetryFailed={hasFailedUploads ? retryFailedUploads : undefined}
+              onRetrySpecificFile={retrySpecificFile}
+              onRemoveFailedFiles={
+                hasFailedUploads ? removeFailedFiles : undefined
+              }
+            />
+          </div>
+        )}
+
+        {/* Reply Preview */}
         {replyingTo && (
           <div className="px-4 py-2 bg-muted/30">
             <div className="flex items-center justify-between">
@@ -465,80 +637,113 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
           </div>
         )}
 
-        <form onSubmit={handleSendMessage} className="flex gap-2">
-          <Button type="button" size="icon" variant="ghost">
-            <PaperclipIcon size={18} />
-          </Button>
+        {/* Message Input */}
+        <div className="p-4">
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={() => setShowFileUpload(true)}
+              disabled={!canAddMoreFiles}
+              title={canAddMoreFiles ? "Attach files" : "Maximum files reached"}
+            >
+              <PaperclipIcon size={18} />
+            </Button>
 
-          <Button
-            type="button"
-            size="icon"
-            variant={isRichTextMode ? "default" : "ghost"}
-            onClick={toggleRichTextMode}
-            title={
-              isRichTextMode ? "Switch to plain text" : "Switch to rich text"
-            }
-          >
-            <Type size={18} />
-          </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant={isRichTextMode ? "default" : "ghost"}
+              onClick={toggleRichTextMode}
+              title={
+                isRichTextMode ? "Switch to plain text" : "Switch to rich text"
+              }
+            >
+              <Type size={18} />
+            </Button>
 
-          {isRichTextMode ? (
-            <div className="flex-1">
-              <RichTextEditor
-                value={richContent}
-                onChange={setRichContent}
-                placeholder="Type a message... Press Ctrl+Enter to send, Enter for new line"
-                submitOnEnter={false}
-                onSubmit={() => handleSendMessage(new Event("submit") as any)}
-                minHeight={40}
-                maxHeight={120}
-                className="border-0"
-              />
-            </div>
-          ) : (
-            <Input
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Type a message..."
-              className="flex-1"
-              disabled={channel?.type === ChannelType.ANNOUNCEMENT}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage(e);
-                }
-              }}
-            />
-          )}
-
-          <Button
-            type="submit"
-            size="icon"
-            disabled={
-              (!newMessage.trim() && !isRichTextMode) ||
-              (isRichTextMode && !hasContent(richContent)) ||
-              sendMessageMutation.isPending ||
-              channel?.type === ChannelType.ANNOUNCEMENT
-            }
-          >
-            {sendMessageMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+            {isRichTextMode ? (
+              <div className="flex-1">
+                <RichTextEditor
+                  value={richContent}
+                  onChange={setRichContent}
+                  placeholder="Type a message... Press Ctrl+Enter to send, Enter for new line"
+                  submitOnEnter={false}
+                  onSubmit={() => handleSendMessage(new Event("submit") as any)}
+                  minHeight={40}
+                  maxHeight={120}
+                  className="border-0"
+                />
+              </div>
             ) : (
-              <Send size={18} />
+              <Input
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Type a message..."
+                className="flex-1"
+                disabled={channel?.type === ChannelType.ANNOUNCEMENT}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage(e);
+                  }
+                }}
+              />
             )}
-          </Button>
-        </form>
+
+            <Button
+              type="button"
+              size="icon"
+              disabled={!canSendMessage}
+              className={cn(isUploading && "animate-pulse")}
+              title={
+                hasOnlyFailedFiles
+                  ? "Remove failed files to send message"
+                  : isRichTextMode
+                  ? "Send message (or Ctrl+Enter)"
+                  : "Send message (or Enter)"
+              }
+              onClick={() => handleSendMessage(new Event("click") as any)}
+            >
+              {sendMessageMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : isUploading ? (
+                <Upload className="h-4 w-4" />
+              ) : (
+                <Send size={18} />
+              )}
+            </Button>
+          </div>
+        </div>
       </div>
 
-      {/* Channel Members Drawer */}
-      {showMembers && (
-        <ChannelMembersDrawer
-          isOpen={showMembers}
-          onClose={toggleMembersDrawer}
-          channelId={channelId}
-          channel={channel}
-        />
-      )}
+      {/* Media Viewer */}
+      <MediaViewer
+        attachment={currentAttachment}
+        attachments={previewAttachments}
+        isOpen={isViewerOpen}
+        onClose={() => {
+          closePreview();
+          setPreviewAttachments([]);
+        }}
+        onNext={() => {
+          const currentIndex = previewAttachments.findIndex(
+            (a) => a._id === currentAttachment?._id,
+          );
+          if (currentIndex < previewAttachments.length - 1) {
+            openPreview(previewAttachments[currentIndex + 1]);
+          }
+        }}
+        onPrevious={() => {
+          const currentIndex = previewAttachments.findIndex(
+            (a) => a._id === currentAttachment?._id,
+          );
+          if (currentIndex > 0) {
+            openPreview(previewAttachments[currentIndex - 1]);
+          }
+        }}
+      />
     </div>
   );
 }
