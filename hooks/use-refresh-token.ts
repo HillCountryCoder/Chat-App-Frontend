@@ -19,12 +19,14 @@ export function useTokenRefresh() {
       return response;
     },
     onSuccess: (data) => {
+      const isInIframe = window !== window.parent;
       const { accessToken, refreshToken } = data;
 
       const cookieOptions = {
         path: "/",
-        sameSite: "strict" as const,
-        secure: process.env.NODE_ENV === "production",
+        sameSite: isInIframe ? "none" as const : "strict" as const,
+        secure: isInIframe ? true : (process.env.NODE_ENV === "production"),
+        ...(isInIframe && { partitioned: true }),
       };
 
       // Update cookies

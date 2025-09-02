@@ -31,6 +31,7 @@ export function useAuthPersistence() {
     const restoreSession = async () => {
       const cookieToken = Cookies.get("token");
       const cookieRefreshToken = Cookies.get("refreshToken");
+      const isInIframe = window !== window.parent;
 
       // Check if we have a token in store that hasn't expired
       const hasNonExpiredToken = token && !isTokenExpired(token);
@@ -75,8 +76,9 @@ export function useAuthPersistence() {
 
             const cookieOptions = {
               path: "/",
-              sameSite: "lax" as const,
-              secure: process.env.NODE_ENV === "production",
+              sameSite: isInIframe ? ("none" as const) : ("lax" as const),
+              secure: isInIframe ? true : process.env.NODE_ENV === "production",
+              ...(isInIframe && { partitioned: true }),
             };
 
             // Use proper expiry times from backend

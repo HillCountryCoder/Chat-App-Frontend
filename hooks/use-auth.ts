@@ -32,11 +32,17 @@ export function useLogin() {
         refreshTokenExpiresIn,
       } = data;
 
+      const isInIframe = window !== window.parent;
+
       const cookieOptions = {
         path: "/",
-        sameSite: "strict" as const,
-        secure: process.env.NODE_ENV === "production",
-      };
+        // Change SameSite to None for iframe context
+        sameSite: isInIframe ? "none" as const : "strict" as const,
+        // Must be secure when sameSite is None
+        secure: isInIframe ? true : (process.env.NODE_ENV === "production"),
+        // Add partitioned attribute for third-party contexts
+        ...(isInIframe && { partitioned: true }),
+      };;
 
       // Use proper expiry times from backend
       const accessTokenExpiry = getExpiryDays(accessTokenExpiresIn || "15m");
