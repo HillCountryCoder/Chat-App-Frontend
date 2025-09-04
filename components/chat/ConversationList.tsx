@@ -18,6 +18,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSocket } from "@/providers/socket-provider";
 import { PresenceAwareAvatar } from "@/components/presence/PresenceAwareAvatar";
 import { useUserPresence } from "@/hooks/use-presence";
+import { useChatMessenger } from "@/providers/chat-messenger-provider";
 
 export default function ConversationList() {
   const {
@@ -42,6 +43,7 @@ export default function ConversationList() {
   const pathname = usePathname();
   const { user: currentUser } = useAuthStore();
 
+  const { messenger, isReady } = useChatMessenger();
   // Get user IDs for presence tracking
   const dmUserIds = useMemo(() => {
     return (
@@ -82,6 +84,35 @@ export default function ConversationList() {
     return message.content;
   };
 
+  const getSenderName = (message: Message): string => {
+    if (typeof message.senderId === "object") {
+      return message.senderId.displayName || "Someone";
+    }
+
+    return message.sender?.displayName || "Someone";
+  };
+
+  const notifyIframingParentApp = (
+    message: Message,
+    conversationType: "dm" | "channel",
+    conversationId: string,
+  ) => {
+    if (!messenger || !isReady || message.senderId === currentUser?._id) {
+      return; // Don't notify for own messages or when messenger not ready
+    }
+
+    const senderName = getSenderName(message);
+
+    messenger.notifyNewMessage({
+      messageId: message._id,
+      sender: senderName,
+      content: message.content,
+      timestamp: new Date(message.createdAt).getTime(),
+      directMessageId: conversationType === "dm" ? conversationId : undefined,
+      channelId: conversationType === "channel" ? conversationId : undefined,
+      conversationType,
+    });
+  };
   // Combine and sort all conversations by last activity
   const unifiedConversations = [
     // Map direct messages to a common format
@@ -130,13 +161,29 @@ export default function ConversationList() {
   useEffect(() => {
     if (!socket) return;
 
-    const handleNewDirectMessage = () => {
+    const handleNewDirectMessage = (data: { message: Message }) => {
       queryClient.invalidateQueries({ queryKey: ["direct-messages"] });
+
+      if (data.message.directMessageId) {
+        notifyIframingParentApp(
+          data.message,
+          "dm",
+          data.message.directMessageId,
+        );
+      }
     };
 
-    const handleNewChannelMessage = () => {
+    const handleNewChannelMessage = (data: { message: Message }) => {
       // Update channels list when a new message arrives
       queryClient.invalidateQueries({ queryKey: ["channels"] });
+
+      if (data.message.channelId) {
+        notifyIframingParentApp(
+          data.message,
+          "channel",
+          data.message.channelId,
+        );
+      }
     };
 
     socket.on("new_direct_message", handleNewDirectMessage);
@@ -148,6 +195,16 @@ export default function ConversationList() {
     };
   }, [socket, queryClient]);
 
+  useEffect(() => {
+    if (!messenger || !isReady) return;
+
+    const totalUnreadCount = unifiedConversations.reduce((total, conv) => {
+      return total + conv.unreadCount;
+    }, 0);
+
+    // Update parent with current unread count
+    messenger.updateMessageCount(totalUnreadCount);
+  }, [unifiedConversations, messenger, isReady]);
   const isLoading = loadingDMs || loadingUsers || loadingChannels;
 
   if (isLoading) {

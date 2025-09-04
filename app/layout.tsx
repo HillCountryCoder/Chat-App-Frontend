@@ -11,6 +11,7 @@ import { ThemeProvider } from "@/providers/theme-provider";
 import { ReactionProvider } from "@/contexts/ReactionContext";
 import { AuthProvider } from "@/providers/auth-proivder";
 import SessionExpiredAlert from "@/components/SessionExpiredAlert";
+import { ChatMessengerProvider } from "@/providers/chat-messenger-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -50,7 +51,9 @@ export default function RootLayout({
                   <PresenceProvider>
                     <ReactionProvider>
                       <AuthProvider>
-                        {children}
+                        <ChatMessengerProvider>
+                          {children}
+                        </ChatMessengerProvider>
                         <Toaster richColors position="top-right" />
                         <SessionExpiredAlert />
                       </AuthProvider>

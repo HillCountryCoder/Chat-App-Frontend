@@ -41,6 +41,8 @@ import { hasContent, valueToText, initialEditorValue } from "@/utils/rich-text";
 import { RichTextEditor } from "./RichTextEditor";
 import { PresenceAwareAvatar } from "@/components/presence/PresenceAwareAvatar";
 import { usePresenceIndicator } from "@/hooks/use-presence-indicator";
+import { useChatMessenger } from "@/providers/chat-messenger-provider";
+import { useAuthStore } from "@/store/auth-store";
 interface ChatWindowProps {
   directMessageId: string;
   recipientId?: string;
@@ -69,6 +71,8 @@ export default function ChatWindow({
   ]);
 
   const presenceIndicator = usePresenceIndicator(recipientId || "");
+  const { messenger, isReady } = useChatMessenger();
+  const { user: currentUser } = useAuthStore();
 
   const extractPlainTextFromRichContent = (richContent: any[]): string => {
     const extractText = (nodes: any[]): string => {
@@ -204,6 +208,26 @@ export default function ChatWindow({
           });
 
           markDirectMessageAsRead.mutate(directMessageId);
+
+          if (
+            data.message.senderId !== currentUser?._id &&
+            messenger &&
+            isReady
+          ) {
+            const senderName =
+              typeof data.message.senderId === "object"
+                ? data.message.senderId.displayName
+                : data.message.sender?.displayName || "Someone";
+
+            messenger.notifyNewMessage({
+              messageId: data.message._id,
+              sender: senderName,
+              content: data.message.content,
+              timestamp: new Date(data.message.createdAt).getTime(),
+              directMessageId: directMessageId,
+              conversationType: "dm",
+            });
+          }
         }
       };
       // Add this new handler for message updates
@@ -256,6 +280,22 @@ export default function ChatWindow({
       markDirectMessageAsRead.mutate(directMessageId);
     }
   }, [directMessageId]);
+  // notify parent when message gets updated
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleMarkAsRead = () => {
+      if (directMessageId && messenger && isReady) {
+        markDirectMessageAsRead.mutate(directMessageId);
+        messenger.notifyMessagesRead();
+      }
+    };
+
+    window.addEventListener("chat:markAsRead", handleMarkAsRead);
+    return () =>
+      window.removeEventListener("chat:markAsRead", handleMarkAsRead);
+  }, [directMessageId, markDirectMessageAsRead, messenger, isReady]);
+
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

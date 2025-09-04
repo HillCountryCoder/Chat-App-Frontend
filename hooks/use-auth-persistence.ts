@@ -54,6 +54,7 @@ export function useAuthPersistence() {
             isInIframe ? "iframe" : "standalone"
           }`,
         );
+      const isInIframe = window !== window.parent;
 
         // Check if we have a token in store that hasn't expired
         const hasNonExpiredToken = token && !isTokenExpired(token);
@@ -173,11 +174,12 @@ export function useAuthPersistence() {
             if (response.ok) {
               const data = await response.json();
 
-              const cookieOptions = {
-                path: "/",
-                sameSite: "lax" as const,
-                secure: process.env.NODE_ENV === "production",
-              };
+            const cookieOptions = {
+              path: "/",
+              sameSite: isInIframe ? ("none" as const) : ("lax" as const),
+              secure: isInIframe ? true : process.env.NODE_ENV === "production",
+              ...(isInIframe && { partitioned: true }),
+            };
 
               // Use proper expiry times from backend
               const accessTokenExpiry = getExpiryDays(

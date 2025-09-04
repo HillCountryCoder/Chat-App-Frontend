@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Plus, MessageSquare, Hash, LogIn } from "lucide-react";
+import { Plus, MessageSquare, Hash, LogIn, ExternalLink } from "lucide-react";
 import CreateChannelDialog from "./CreateChannelDialog";
 import ConversationList from "./ConversationList";
 import { useAuthPersistence } from "@/hooks/use-auth-persistence";
@@ -26,8 +26,12 @@ export default function ChatDashboard() {
     setShowCreateChannel(true);
   };
 
-  const handleLogin = () => {
-    window.location.href = "/login";
+  const handleLoginInIframe = () => {
+    window.location.href = "/login?iframe=true";
+  };
+
+  const handleOpenInNewTab = () => {
+    window.open(window.location.origin, "_blank");
   };
 
   // Show loading state while hydrating
@@ -42,8 +46,10 @@ export default function ChatDashboard() {
     );
   }
 
-  // Handle unauthenticated state (especially for iframe)
+  // Handle unauthenticated state - THIS IS THE KEY FIX
   if (!isAuthenticated) {
+    console.log("🔄 ChatDashboard: Not authenticated, showing login UI");
+
     return (
       <div className="h-full flex items-center justify-center p-6">
         <div className="text-center max-w-md">
@@ -57,18 +63,38 @@ export default function ChatDashboard() {
 
           <p className="text-muted-foreground mb-6">
             {isInIframe
-              ? "Please log in to access your messages and conversations."
+              ? "Your session has expired. Please choose an option to continue."
               : "Please log in to start chatting with your team."}
           </p>
 
-          <Button onClick={handleLogin} className="w-full">
-            <LogIn className="mr-2 h-4 w-4" />
-            Login to Chat
-          </Button>
+          <div className="space-y-3">
+            {isInIframe ? (
+              <>
+                <Button onClick={handleOpenInNewTab} className="w-full">
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Open Chat in New Tab
+                </Button>
+
+                <Button
+                  onClick={handleLoginInIframe}
+                  className="w-full"
+                  variant="outline"
+                >
+                  <LogIn className="mr-2 h-4 w-4" />
+                  Login Here
+                </Button>
+              </>
+            ) : (
+              <Button onClick={handleLoginInIframe} className="w-full">
+                <LogIn className="mr-2 h-4 w-4" />
+                Login to Chat
+              </Button>
+            )}
+          </div>
 
           {isInIframe && (
             <p className="text-xs text-muted-foreground mt-4">
-              Running in iframe mode
+              Running in embedded mode
             </p>
           )}
         </div>
@@ -76,7 +102,8 @@ export default function ChatDashboard() {
     );
   }
 
-  // Main authenticated dashboard
+  // Only render the full dashboard if authenticated
+  // This prevents other components from making API calls when not authenticated
   return (
     <div className="h-full flex flex-col">
       <div className="p-6 border-b border-border">
