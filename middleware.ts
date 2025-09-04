@@ -25,6 +25,10 @@ const isTokenExpired = (token: string): boolean => {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  if (authRoutes.includes(pathname)) {
+    return NextResponse.next();
+  }
+
   const token = request.cookies.get("token")?.value;
   const refreshToken = request.cookies.get("refreshToken")?.value;
 
@@ -42,11 +46,6 @@ export function middleware(request: NextRequest) {
   } else if (refreshToken) {
     // We have refresh token, let the client handle token refresh
     isAuthenticated = true;
-  }
-
-  // Redirect authenticated users away from auth pages
-  if (isAuthenticated && authRoutes.includes(pathname)) {
-    return NextResponse.redirect(new URL("/chat", request.url));
   }
 
   // Redirect authenticated users from root to chat

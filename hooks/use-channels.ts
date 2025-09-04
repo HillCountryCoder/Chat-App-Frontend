@@ -7,14 +7,14 @@ import { useAuthStore } from "@/store/auth-store";
 import { Value } from "platejs";
 
 export function useChannels() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, token } = useAuthStore();
   return useQuery({
     queryKey: ["channels"],
     queryFn: async () => {
       const { data } = await api.get("/channels");
       return data as Channel[];
     },
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && !!token,
   });
 }
 

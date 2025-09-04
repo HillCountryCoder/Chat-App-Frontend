@@ -1,13 +1,20 @@
+// Fixed page.tsx - Let ChatDashboard handle authentication
 "use client";
 
-import { useAuthStore } from "@/store/auth-store";
 import ChatDashboard from "@/components/chat/ChatDashboard";
+import { useAuthPersistence } from "@/hooks/use-auth-persistence";
 
 export default function ChatHomePage() {
-  const { user, isAuthenticated } = useAuthStore();
+  // Just ensure auth persistence is running
+  const { hasHydrated } = useAuthPersistence();
 
-  if (!isAuthenticated || !user) {
-    return null; // Will be redirected by middleware
+  // Always render ChatDashboard - it will handle auth state internally
+  if (!hasHydrated) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
   }
 
   return <ChatDashboard />;

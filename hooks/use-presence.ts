@@ -9,12 +9,13 @@ import { useAuthStore } from "@/store/auth-store";
 // Hook for getting presence status of specific users
 export function useUserPresence(userIds: string[]) {
   const { getUserPresence } = usePresence();
+  const { isAuthenticated, token } = useAuthStore();
   const queryClient = useQueryClient();
   // Fetch presence via API as fallback
   const { data: apiPresence, isLoading } = useQuery({
     queryKey: ["presence", "bulk", userIds.sort()],
     queryFn: () => presenceApi.getBulkPresence(userIds),
-    enabled: userIds.length > 0,
+    enabled: userIds.length > 0 && isAuthenticated && !!token,
     staleTime: 30000, // Consider data fresh for 30 seconds
     refetchInterval: 60000, // Refetch every minute
   });
@@ -86,6 +87,7 @@ export function useSingleUserPresence(userId: string) {
 export function useMyPresence() {
   const { currentStatus, changeStatus, isConnected, isAuthenticated } =
     usePresence();
+  const { token } = useAuthStore();
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
 
@@ -93,7 +95,7 @@ export function useMyPresence() {
   const { data: myPresence, isLoading } = useQuery({
     queryKey: ["presence", "me"],
     queryFn: presenceApi.getMyPresence,
-    enabled: !!user,
+    enabled: !!user && isAuthenticated && !!token,
     staleTime: 30000,
   });
 
@@ -161,6 +163,7 @@ export function useOnlineUsers(limit = 20) {
     queryFn: () => presenceApi.getOnlineUsers({ limit }),
     staleTime: 30000,
     refetchInterval: 60000,
+    enabled: isAuthenticated && !!useAuthStore.getState().token,
   });
   // Merge real-time and API data
   const mergedUsers = useMemo(() => {
@@ -189,6 +192,9 @@ export function usePresenceAnalytics(dateRange?: {
     queryKey: ["presence", "analytics", dateRange],
     queryFn: () => presenceApi.getPresenceAnalytics(dateRange),
     staleTime: 300000, // 5 minutes
+    enabled:
+      !!useAuthStore.getState().isAuthenticated &&
+      !!useAuthStore.getState().token,
   });
 }
 
@@ -203,6 +209,9 @@ export function usePresenceHistory(params?: {
     queryKey: ["presence", "history", params],
     queryFn: () => presenceApi.getPresenceHistory(params),
     staleTime: 60000, // 1 minute
+    enabled:
+      !!useAuthStore.getState().isAuthenticated &&
+      !!useAuthStore.getState().token,
   });
 }
 
@@ -211,6 +220,7 @@ export function useConnectionPresence(
   connectionIds: string[],
   type?: "direct_message" | "channel_member",
 ) {
+  const { isAuthenticated, token } = useAuthStore();
   const { getBulkPresence, getUserPresence } = usePresence();
 
   // Get real-time presence
@@ -229,7 +239,7 @@ export function useConnectionPresence(
   const { data: apiPresence, isLoading } = useQuery({
     queryKey: ["presence", "connections", connectionIds.sort(), type],
     queryFn: () => presenceApi.getBulkPresence(connectionIds),
-    enabled: connectionIds.length > 0,
+    enabled: connectionIds.length > 0 && isAuthenticated && !!token,
     staleTime: 30000,
   });
 

@@ -1,6 +1,7 @@
+// Debug version of ChatDashboard to identify the auth state issue
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Plus, MessageSquare, Hash, LogIn, ExternalLink } from "lucide-react";
@@ -16,7 +17,20 @@ export default function ChatDashboard() {
 
   // Get auth state and iframe detection
   const { isAuthenticated, hasHydrated, isInIframe } = useAuthPersistence();
-  const { user } = useAuthStore();
+  const { user, token, refreshToken } = useAuthStore();
+
+  // Debug logging
+  useEffect(() => {
+    console.log("🔍 ChatDashboard Auth Debug:", {
+      isAuthenticated,
+      hasHydrated,
+      isInIframe,
+      hasUser: !!user,
+      hasToken: !!token,
+      hasRefreshToken: !!refreshToken,
+      tokenPreview: token ? token.substring(0, 10) + "..." : null,
+    });
+  }, [isAuthenticated, hasHydrated, isInIframe, user, token, refreshToken]);
 
   const handleNewChat = () => {
     router.push("/chat/new");
@@ -36,6 +50,7 @@ export default function ChatDashboard() {
 
   // Show loading state while hydrating
   if (!hasHydrated) {
+    console.log("🔄 ChatDashboard: Still hydrating...");
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
@@ -49,6 +64,7 @@ export default function ChatDashboard() {
   // Handle unauthenticated state - THIS IS THE KEY FIX
   if (!isAuthenticated) {
     console.log("🔄 ChatDashboard: Not authenticated, showing login UI");
+    console.log("🔍 Auth State Details:", { isAuthenticated, user, token });
 
     return (
       <div className="h-full flex items-center justify-center p-6">
@@ -101,6 +117,8 @@ export default function ChatDashboard() {
       </div>
     );
   }
+
+  console.log("✅ ChatDashboard: Authenticated, showing chat interface");
 
   // Only render the full dashboard if authenticated
   // This prevents other components from making API calls when not authenticated
