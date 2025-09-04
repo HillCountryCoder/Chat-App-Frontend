@@ -8,6 +8,9 @@ import Cookies from "js-cookie";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
 
+// Detect iframe environment
+const isInIframe = typeof window !== "undefined" && window !== window.parent;
+
 export const api = axios.create({
   baseURL: `${API_URL}/api`,
   headers: {
@@ -17,7 +20,7 @@ export const api = axios.create({
 
 // Helper function to convert duration strings to cookie expiry days
 const getExpiryDays = (duration: string): number => {
-  if (duration === "15m") return 1/24/4; // 15 minutes in days
+  if (duration === "15m") return 1 / 24 / 4; // 15 minutes in days
   if (duration === "7d") return 7;
   if (duration === "30d") return 30;
   return 1; // Default fallback
@@ -30,6 +33,10 @@ let failedQueue: Array<{
   reject: (reason?: any) => void;
 }> = [];
 
+// Track rate limit state
+let isRateLimited = false;
+let rateLimitUntil = 0;
+
 const processQueue = (error: any = null, token: string | null = null) => {
   failedQueue.forEach(({ resolve, reject }) => {
     if (error) {
@@ -40,6 +47,24 @@ const processQueue = (error: any = null, token: string | null = null) => {
   });
 
   failedQueue = [];
+};
+
+const clearAuthAndRedirect = () => {
+  // Clear auth data
+  useAuthStore.getState().actions.logout();
+
+  // Only clear cookies if not in iframe (to prevent conflicts)
+  if (!isInIframe) {
+    Cookies.remove("token");
+    Cookies.remove("refreshToken");
+  }
+
+  // Only redirect if not already on auth page and not in iframe
+  if (!isInIframe && !window.location.pathname.includes("/login")) {
+    window.location.href = "/login";
+  } else if (isInIframe) {
+    console.log("🔄 Iframe: Auth cleared, parent should handle navigation");
+  }
 };
 
 api.interceptors.request.use((config) => {
@@ -55,7 +80,55 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as any;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Handle rate limiting (429) - stop all further requests
+    if (error.response?.status === 429) {
+      console.error(
+        `❌ Rate limited in ${
+          isInIframe ? "iframe" : "main app"
+        }. Stopping requests.`,
+      );
+
+      // Set rate limit flag and timestamp
+      isRateLimited = true;
+      rateLimitUntil = Date.now() + 60000; // Block for 1 minute
+
+      // Process queue with rate limit error
+      processQueue(new Error("Rate limited"), null);
+
+      // Clear auth and redirect (iframe-aware)
+      clearAuthAndRedirect();
+
+      return Promise.reject(new Error("Rate limited - please try again later"));
+    }
+
+    // Don't attempt refresh if rate limited
+    if (isRateLimited && Date.now() < rateLimitUntil) {
+      console.log(
+        `Still rate limited in ${isInIframe ? "iframe" : "main app"}`,
+      );
+      clearAuthAndRedirect();
+      return Promise.reject(new Error("Rate limited"));
+    }
+
+    // Reset rate limit flag if time has passed
+    if (isRateLimited && Date.now() >= rateLimitUntil) {
+      isRateLimited = false;
+      rateLimitUntil = 0;
+    }
+
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !isRateLimited
+    ) {
+      // IFRAME STRATEGY: Don't attempt refresh, just clear auth
+      if (isInIframe) {
+        console.log("🚫 401 in iframe - not attempting refresh, clearing auth");
+        clearAuthAndRedirect();
+        return Promise.reject(error);
+      }
+
+      // MAIN APP STRATEGY: Attempt refresh (your existing logic)
       if (isRefreshing) {
         // Add request to queue
         return new Promise((resolve, reject) => {
@@ -87,11 +160,11 @@ api.interceptors.response.use(
           refreshToken,
         });
 
-        const { 
-          accessToken, 
+        const {
+          accessToken,
           refreshToken: newRefreshToken,
           accessTokenExpiresIn,
-          refreshTokenExpiresIn 
+          refreshTokenExpiresIn,
         } = response.data;
 
         // Update cookies with proper expiry times
@@ -104,9 +177,9 @@ api.interceptors.response.use(
         const accessTokenExpiry = getExpiryDays(accessTokenExpiresIn || "15m");
         const refreshTokenExpiry = getExpiryDays(refreshTokenExpiresIn || "7d");
 
-        Cookies.set("token", accessToken, { 
-          ...cookieOptions, 
-          expires: accessTokenExpiry 
+        Cookies.set("token", accessToken, {
+          ...cookieOptions,
+          expires: accessTokenExpiry,
         });
         Cookies.set("refreshToken", newRefreshToken, {
           ...cookieOptions,
@@ -114,7 +187,9 @@ api.interceptors.response.use(
         });
 
         // Update Zustand store
-        useAuthStore.getState().actions.updateTokens(accessToken, newRefreshToken);
+        useAuthStore
+          .getState()
+          .actions.updateTokens(accessToken, newRefreshToken);
 
         console.log("✅ API Interceptor: Token refresh successful");
 
@@ -124,23 +199,25 @@ api.interceptors.response.use(
         // Retry the original request
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return api(originalRequest);
+      } catch (refreshError: any) {
+        console.error(
+          "❌ API Interceptor: Token refresh failed:",
+          refreshError,
+        );
 
-      } catch (refreshError) {
-        console.error("❌ API Interceptor: Token refresh failed:", refreshError);
-        
+        // Check if refresh failed due to rate limiting
+        if (refreshError.response?.status === 429) {
+          console.error("Refresh token endpoint rate limited");
+          isRateLimited = true;
+          rateLimitUntil = Date.now() + 60000; // Block for 1 minute
+        }
+
         // Process queue with error
         processQueue(refreshError, null);
-        
-        // Clear auth data
-        useAuthStore.getState().actions.logout();
-        Cookies.remove("token");
-        Cookies.remove("refreshToken");
-        
-        // Only redirect if not already on auth page
-        if (!window.location.pathname.includes('/login')) {
-          window.location.href = "/login";
-        }
-        
+
+        // Clear auth and redirect
+        clearAuthAndRedirect();
+
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
