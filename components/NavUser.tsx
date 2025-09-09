@@ -26,8 +26,7 @@ export function NavUser() {
   const totalUnread = getTotalUnreadCount();
 
   const handleLogout = async () => {
-    await logout.mutateAsync();
-    router.push("/login");
+    await logout.mutateAsync({});
   };
 
   return (

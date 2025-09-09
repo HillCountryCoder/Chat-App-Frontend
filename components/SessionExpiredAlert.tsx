@@ -126,7 +126,7 @@ export default function SessionExpiredAlert() {
 
   const handleLogout = async () => {
     try {
-      await logout.mutateAsync();
+      await logout.mutateAsync({});
     } catch (error) {
       // If logout fails due to expired token, clear local state anyway
       console.warn("Logout failed, clearing local session:", error);
