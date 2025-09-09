@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useAuthStore } from "@/store/auth-store";
 import { api } from "@/lib/api";
 import Cookies from "js-cookie";
@@ -29,22 +29,86 @@ const MAX_REFRESH_ATTEMPTS = 3;
 let lastRefreshAttempt = 0;
 const REFRESH_COOLDOWN = 60000; // 1 minute cooldown between attempts
 
-// Iframe-specific tracking
-let iframeRefreshAttempted = false;
+// Iframe-specific tracking - use more specific flags
+let iframeInitialized = false;
+let sessionRestoreAttempted = false;
 
 export function useAuthPersistence() {
   const { token, refreshToken, isAuthenticated, _hasHydrated, actions } =
     useAuthStore();
 
   const isRestoringRef = useRef(false);
+  const cookieSyncRef = useRef(false);
+  const sessionValidatedRef = useRef(false);
 
-  // Session restoration ONLY after hydration
+  // Memoize cookie operations to prevent unnecessary re-runs
+  const syncTokensWithCookies = useCallback(() => {
+    if (isInIframe) {
+      console.log("🚫 Skipping cookie sync in iframe mode");
+
+      // Only set API headers if we have a token
+      if (token) {
+        api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      } else {
+        delete api.defaults.headers.common["Authorization"];
+      }
+      return;
+    }
+
+    // Prevent multiple sync operations
+    if (cookieSyncRef.current) return;
+    cookieSyncRef.current = true;
+
+    try {
+      // Regular cookie sync for standalone app
+      if (token) {
+        const cookieToken = Cookies.get("token");
+        if (!cookieToken) {
+          Cookies.set("token", token, {
+            expires: 1 / 24 / 4, // 15 minutes
+            path: "/",
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+          });
+        }
+        api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      } else {
+        Cookies.remove("token");
+        delete api.defaults.headers.common["Authorization"];
+      }
+
+      if (refreshToken) {
+        const cookieRefreshToken = Cookies.get("refreshToken");
+        if (!cookieRefreshToken) {
+          Cookies.set("refreshToken", refreshToken, {
+            expires: 7,
+            path: "/",
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+          });
+        }
+      } else {
+        Cookies.remove("refreshToken");
+      }
+    } finally {
+      // Reset the flag after a brief delay
+      setTimeout(() => {
+        cookieSyncRef.current = false;
+      }, 100);
+    }
+  }, [token, refreshToken]);
+
+  // Session restoration - SINGLE useEffect with proper dependencies
   useEffect(() => {
-    if (!_hasHydrated || isRestoringRef.current) return;
+    // Prevent multiple restoration attempts
+    if (!_hasHydrated || isRestoringRef.current || sessionRestoreAttempted) {
+      return;
+    }
 
     const restoreSession = async () => {
       try {
         isRestoringRef.current = true;
+        sessionRestoreAttempted = true;
 
         const cookieToken = Cookies.get("token");
         const cookieRefreshToken = Cookies.get("refreshToken");
@@ -57,8 +121,6 @@ export function useAuthPersistence() {
 
         // Check if we have a token in store that hasn't expired
         const hasNonExpiredToken = token && !isTokenExpired(token);
-
-        // But we also need to check if it's actually valid (authenticated state)
         const shouldSkipRestoration = hasNonExpiredToken && isAuthenticated;
 
         if (shouldSkipRestoration) {
@@ -69,10 +131,12 @@ export function useAuthPersistence() {
         // IFRAME STRATEGY: Be very conservative
         if (isInIframe) {
           // Prevent multiple attempts in the same iframe session
-          if (iframeRefreshAttempted) {
-            console.log("🚫 Iframe refresh already attempted, skipping");
+          if (iframeInitialized) {
+            console.log("🚫 Iframe already initialized, skipping");
             return;
           }
+
+          iframeInitialized = true;
 
           // Strategy 1: Check if we have a valid access token in cookies
           if (cookieToken && !isTokenExpired(cookieToken)) {
@@ -93,7 +157,6 @@ export function useAuthPersistence() {
 
           // Strategy 2: If no valid access token, DON'T attempt refresh in iframe
           console.log("⚠️ No valid token in iframe, requiring fresh login");
-          iframeRefreshAttempted = true;
 
           // Clear any stale auth data
           actions.logout();
@@ -103,7 +166,7 @@ export function useAuthPersistence() {
           return;
         }
 
-        // STANDALONE APP STRATEGY: Full restoration logic (your existing logic)
+        // STANDALONE APP STRATEGY: Full restoration logic
         console.log("🔄 Standalone app - proceeding with full restoration");
 
         // Check cooldown period for refresh attempts
@@ -128,51 +191,27 @@ export function useAuthPersistence() {
           return;
         }
 
-        // If we have refresh token (either in store or cookies) and need to refresh
+        // If we have refresh token and need to refresh
         const availableRefreshToken = refreshToken || cookieRefreshToken;
         const needsRefresh =
           availableRefreshToken &&
-          (!cookieToken ||
-            isTokenExpired(cookieToken) ||
-            (hasNonExpiredToken && !isAuthenticated)); // Stale token case
+          (!token || isTokenExpired(token)) &&
+          cookieRefreshToken;
 
         if (needsRefresh) {
-          const tokenToUse = refreshToken || cookieRefreshToken;
+          console.log("🔄 Attempting token refresh...");
+          refreshAttempts++;
+          lastRefreshAttempt = now;
 
           try {
-            // Set refresh token first if not already set
-            if (!refreshToken && cookieRefreshToken) {
-              actions.setRefreshToken(cookieRefreshToken);
-            }
+            const response = await api.post("/auth/refresh", {
+              refreshToken: availableRefreshToken,
+            });
 
-            // Increment attempt counter and update timestamp
-            refreshAttempts++;
-            lastRefreshAttempt = now;
+            if (response.status === 200 && response.data?.accessToken) {
+              const data = response.data;
 
-            console.log(
-              `🔄 Attempting token refresh (${refreshAttempts}/${MAX_REFRESH_ATTEMPTS})`,
-            );
-
-            const response = await fetch(
-              `${
-                process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001"
-              }/api/auth/refresh`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ refreshToken: tokenToUse }),
-              },
-            );
-
-            // Handle rate limiting specifically
-            if (response.status === 429) {
-              console.error("❌ Rate limited during session restore");
-              throw new Error("Rate limited");
-            }
-
-            if (response.ok) {
-              const data = await response.json();
-
+              // Cookie options based on environment
               const cookieOptions = {
                 path: "/",
                 sameSite: isInIframe ? ("none" as const) : ("lax" as const),
@@ -235,7 +274,7 @@ export function useAuthPersistence() {
               return;
             }
 
-            // For other errors, don't immediately redirect, let other mechanisms handle it
+            // For other errors, don't immediately redirect
             console.log("Session restore failed, but not clearing auth yet");
           }
         }
@@ -256,66 +295,27 @@ export function useAuthPersistence() {
     };
 
     restoreSession();
-  }, [_hasHydrated, token, refreshToken, actions]);
+  }, [_hasHydrated]); // MINIMAL DEPENDENCIES - only trigger on hydration
 
-  // Sync tokens with cookies (skip in iframe mode to prevent conflicts)
+  // Cookie sync - separate useEffect with stable dependencies
   useEffect(() => {
-    if (isInIframe) {
-      console.log("🚫 Skipping cookie sync in iframe mode");
+    syncTokensWithCookies();
+  }, [syncTokensWithCookies]);
 
-      // Still set API headers if we have a token
-      if (token) {
-        api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-      } else {
-        delete api.defaults.headers.common["Authorization"];
-      }
-      return;
-    }
-
-    // Regular cookie sync for standalone app
-    if (token) {
-      const cookieToken = Cookies.get("token");
-      if (!cookieToken) {
-        // For syncing, use short expiry since we don't know the exact expiry
-        Cookies.set("token", token, {
-          expires: 1 / 24 / 4, // 15 minutes
-          path: "/",
-          sameSite: "lax",
-          secure: process.env.NODE_ENV === "production",
-        });
-      }
-      api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-    } else {
-      Cookies.remove("token");
-      delete api.defaults.headers.common["Authorization"];
-    }
-
-    if (refreshToken) {
-      const cookieRefreshToken = Cookies.get("refreshToken");
-      if (!cookieRefreshToken) {
-        // Default to 7 days for refresh token sync
-        Cookies.set("refreshToken", refreshToken, {
-          expires: 7,
-          path: "/",
-          sameSite: "lax",
-          secure: process.env.NODE_ENV === "production",
-        });
-      }
-    } else {
-      Cookies.remove("refreshToken");
-    }
-  }, [token, refreshToken]);
-
-  // Initial session validation (throttled for iframes)
+  // Session validation - only run once after successful auth
   useEffect(() => {
+    if (sessionValidatedRef.current) return;
+
     const validateSession = async () => {
       if (token && isAuthenticated) {
+        sessionValidatedRef.current = true;
+
         try {
           const response = await api.get("/auth/me");
           actions.setUser(response.data.user);
         } catch (error) {
           console.error("Session validation failed", error);
-          // Don't logout here - let the API interceptor handle 401s
+          sessionValidatedRef.current = false; // Allow retry on next auth change
         }
       }
     };
@@ -329,14 +329,15 @@ export function useAuthPersistence() {
     }
   }, [token, isAuthenticated, actions]);
 
-  // Trigger socket reconnection when token changes (skip for iframes)
+  // Socket reconnection - minimal and non-interfering
   useEffect(() => {
     if (token && isAuthenticated && !isInIframe) {
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
         reconnectSocket();
       }, 100);
+      return () => clearTimeout(timeout);
     }
-  }, [token, isAuthenticated]);
+  }, [token && isAuthenticated]); // Combine conditions to reduce triggers
 
   return {
     isAuthenticated,

@@ -36,7 +36,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    immer((set) => ({
+    immer((set, get) => ({
       user: null,
       token: null,
       refreshToken: null,
@@ -52,16 +52,31 @@ export const useAuthStore = create<AuthState>()(
       actions: {
         setUser: (user) =>
           set((state) => {
+            console.log("🔄 Auth Store: Setting user");
             state.user = user;
-            state.isAuthenticated = !!user;
+            // Update isAuthenticated based on both user and token
+            const currentState = get();
+            state.isAuthenticated = !!(user && currentState.token);
+            console.log(
+              "✅ Auth Store: User set, isAuthenticated:",
+              state.isAuthenticated,
+            );
           }),
         setToken: (token) =>
           set((state) => {
+            console.log("🔄 Auth Store: Setting token");
             state.token = token;
-            state.isAuthenticated = !!token;
+            // Update isAuthenticated based on both token and user
+            const currentState = get();
+            state.isAuthenticated = !!(token && currentState.user);
+            console.log(
+              "✅ Auth Store: Token set, isAuthenticated:",
+              state.isAuthenticated,
+            );
           }),
         setRefreshToken: (refreshToken) =>
           set((state) => {
+            console.log("🔄 Auth Store: Setting refresh token");
             state.refreshToken = refreshToken;
           }),
         setSessionInfo: (info) =>
@@ -80,20 +95,25 @@ export const useAuthStore = create<AuthState>()(
           rememberMe = false,
         ) =>
           set((state) => {
+            console.log("🔄 Auth Store: Login called");
             state.user = user;
             state.token = accessToken;
             state.refreshToken = refreshToken;
             state.expiresIn = expiresIn;
-            state.isAuthenticated = true;
+            state.isAuthenticated = true; // Always true on login
             state.sessionInfo = {
               loginTime: new Date().toISOString(),
               rememberMe,
               deviceInfo:
                 typeof navigator !== "undefined" ? navigator.userAgent : null,
             };
+            console.log(
+              "✅ Auth Store: Login completed, isAuthenticated set to true",
+            );
           }),
         logout: () =>
           set((state) => {
+            console.log("🔄 Auth Store: Logout called");
             state.user = null;
             state.token = null;
             state.refreshToken = null;
@@ -104,11 +124,21 @@ export const useAuthStore = create<AuthState>()(
               rememberMe: false,
               deviceInfo: null,
             };
+            console.log(
+              "✅ Auth Store: Logout completed, isAuthenticated set to false",
+            );
           }),
+        // 🔥 FIX: This was the main issue!
         updateTokens: (accessToken, refreshToken) =>
           set((state) => {
+            console.log("🔄 Auth Store: Updating tokens");
             state.token = accessToken;
             state.refreshToken = refreshToken;
+            // 🔥 CRITICAL FIX: Set isAuthenticated to true when updating tokens
+            state.isAuthenticated = true;
+            console.log(
+              "✅ Auth Store: Tokens updated, isAuthenticated set to true",
+            );
           }),
       },
     })),
@@ -120,6 +150,8 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
         expiresIn: state.expiresIn,
         sessionInfo: state.sessionInfo,
+        // 🔥 IMPORTANT: Also persist isAuthenticated
+        isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: (state) => {
         return (state, error) => {

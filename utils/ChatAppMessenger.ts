@@ -1,4 +1,4 @@
-// utils/ChatAppMessanger.ts (or rename to ChatAppMessenger.ts)
+// utils/ChatAppMessenger.ts
 
 interface ParentAppInfo {
   id: string;
@@ -31,6 +31,9 @@ export class ChatAppMessenger {
   private isReady = false;
   private static instance: ChatAppMessenger | null = null;
 
+  // Add unread count cache
+  private unreadCounts = new Map<string, number>();
+
   constructor(config: ChatAppConfig = {}) {
     this.config = {
       enableLogging: process.env.NODE_ENV === "development",
@@ -38,8 +41,11 @@ export class ChatAppMessenger {
       ...config,
     };
 
-    this.setupMessageListener();
-    this.notifyReady();
+    // Only setup if we're in the browser
+    if (typeof window !== "undefined") {
+      this.setupMessageListener();
+      this.notifyReady();
+    }
   }
 
   // Singleton pattern to ensure one messenger instance
@@ -52,6 +58,8 @@ export class ChatAppMessenger {
 
   // Notify all connected parent apps that chat is ready
   private notifyReady() {
+    if (typeof window === "undefined") return;
+
     this.sendToAllParents("CHAT_READY", {
       timestamp: Date.now(),
       version: "1.0",
@@ -97,6 +105,9 @@ export class ChatAppMessenger {
     type: string,
     payload?: MessagePayload,
   ) {
+    // Check if we're in browser environment
+    if (typeof window === "undefined") return;
+
     try {
       const message = {
         source: "chat-app",
@@ -117,6 +128,9 @@ export class ChatAppMessenger {
 
   // Listen for messages from parent applications
   private setupMessageListener() {
+    // Check if we're in browser environment
+    if (typeof window === "undefined") return;
+
     window.addEventListener("message", (event: MessageEvent) => {
       if (!this.isValidParentOrigin(event.origin)) {
         if (this.config.enableLogging) {
@@ -171,9 +185,6 @@ export class ChatAppMessenger {
         break;
 
       default:
-        // if (data.type.startsWith("CUSTOM_")) {
-        //   this.handleCustomMessage(data.type, data.payload, data.source);
-        // } else
         if (this.config.enableLogging) {
           console.log(
             "[Chat App] Unknown message type from parent:",
@@ -192,10 +203,12 @@ export class ChatAppMessenger {
   ) {
     if (!this.isReady) return;
 
+    const conversationId = messageData.channelId || messageData.directMessageId;
     const unreadCount = this.getUnreadMessageCount(
       messageData.conversationType,
-      messageData.channelId || messageData.directMessageId,
+      conversationId,
     );
+
     const payload = {
       messageId: messageData.messageId || Date.now().toString(),
       sender: messageData.sender,
@@ -205,7 +218,7 @@ export class ChatAppMessenger {
       timestamp: messageData.timestamp || Date.now(),
       unreadCount,
       conversationType: messageData.conversationType,
-      conversationId: messageData.channelId || messageData.directMessageId,
+      conversationId,
     };
 
     if (targetParentId) {
@@ -241,16 +254,36 @@ export class ChatAppMessenger {
     }
   }
 
+  // PUBLIC METHODS for managing unread counts
+
+  // Update unread count for a specific conversation
+  public updateUnreadCount(conversationId: string, count: number) {
+    this.unreadCounts.set(conversationId, count);
+  }
+
+  // Clear unread count for a specific conversation
+  public clearUnreadCount(conversationId: string) {
+    this.unreadCounts.delete(conversationId);
+  }
+
+  // Get total unread count across all conversations
+  public getTotalUnreadCount(): number {
+    let total = 0;
+    this.unreadCounts.forEach((count) => (total += count));
+    return total;
+  }
+
   // PRIVATE HANDLER METHODS - Customize these based on your chat app
 
   private handleMarkAsRead(parentId: string) {
     // Implement your mark as read logic here
-    // You might want to emit an event that your components can listen to
-    window.dispatchEvent(
-      new CustomEvent("chat:markAsRead", {
-        detail: { parentId },
-      }),
-    );
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("chat:markAsRead", {
+          detail: { parentId },
+        }),
+      );
+    }
 
     this.notifyMessagesRead(parentId);
 
@@ -261,11 +294,13 @@ export class ChatAppMessenger {
 
   private handleUserInfoUpdate(userInfo: any, parentId: string) {
     // Update your chat UI with user information
-    window.dispatchEvent(
-      new CustomEvent("chat:userInfoUpdate", {
-        detail: { userInfo, parentId },
-      }),
-    );
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("chat:userInfoUpdate", {
+          detail: { userInfo, parentId },
+        }),
+      );
+    }
 
     if (this.config.enableLogging) {
       console.log(
@@ -290,25 +325,19 @@ export class ChatAppMessenger {
     }
   }
 
-  private handleCustomMessage(type: string, payload: any, parentId: string) {
-    // Handle custom messages from parent apps
-    if (this.config.enableLogging) {
-      console.log(
-        `[Chat App] Custom message ${type} from parent ${parentId}:`,
-        payload,
-      );
-    }
-  }
-
-  // UTILITY METHODS - Implement these based on your actual chat logic
+  // UTILITY METHODS - Now properly implemented
 
   private getUnreadMessageCount(
     type?: "dm" | "channel",
     conversationId?: string,
   ): number {
-    // Replace with your actual unread count logic
-    // This should integrate with your existing unread hooks/state
-    return 0;
+    if (!conversationId) {
+      // Return total unread count if no specific conversation
+      return this.getTotalUnreadCount();
+    }
+
+    // Return specific conversation unread count
+    return this.unreadCounts.get(conversationId) || 0;
   }
 
   private isValidParentOrigin(origin: string): boolean {
@@ -333,5 +362,6 @@ export class ChatAppMessenger {
     this.sendToAllParents("CHAT_DISCONNECTED");
     this.connectedParents.clear();
     this.isReady = false;
+    this.unreadCounts.clear();
   }
 }
