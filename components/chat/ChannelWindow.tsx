@@ -49,6 +49,9 @@ import {
 import { Attachment } from "@/types/attachment";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useChatMessenger } from "@/providers/chat-messenger-provider";
+import { useAuthStore } from "@/store/auth-store";
+
 interface ChannelWindowProps {
   channelId: string;
 }
@@ -78,6 +81,10 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
   const [previewAttachments, setPreviewAttachments] = useState<Attachment[]>(
     [],
   );
+
+  // Add messenger integration
+  const { messenger, isReady } = useChatMessenger();
+  const { user: currentUser } = useAuthStore();
 
   const {
     pendingFiles,
@@ -139,6 +146,45 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
 
   const sendMessageMutation = useSendChannelMessage();
 
+  // Helper function to get sender name from message
+  const getSenderName = (message: Message): string => {
+    if (typeof message.senderId === "object") {
+      return message.senderId.displayName || "Someone";
+    }
+    return message.sender?.displayName || "Someone";
+  };
+
+  // Enhanced notification function for channel messages
+  const notifyParentApp = (message: Message) => {
+    // Don't notify for own messages or when messenger not ready
+    if (!messenger || !isReady || message.senderId === currentUser?._id) {
+      return;
+    }
+
+    const senderName = getSenderName(message);
+
+    // Notify parent app about new channel message
+    messenger.notifyNewMessage({
+      messageId: message._id,
+      sender: senderName,
+      content: message.content,
+      timestamp: new Date(message.createdAt).getTime(),
+      channelId: channelId,
+      conversationType: "channel",
+    });
+
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[ChannelWindow] Notified parent about new channel message:`,
+        {
+          channelId,
+          sender: senderName,
+          preview: message.content.substring(0, 30),
+        },
+      );
+    }
+  };
+
   // Reset the ref when channelId changes
   useEffect(() => {
     // Mark as read only once per channel visit
@@ -165,8 +211,7 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
     setMessageReactions(reactionsMap);
   }, [messages]);
 
-  // Listen for new messages via socket
-  // Replace the existing handleMessageUpdated handler and socket listener
+  // Listen for new messages via socket with enhanced notification
   useEffect(() => {
     if (!socket) return;
 
@@ -181,10 +226,13 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
         if (hasMarkedAsReadRef.current) {
           markAsReadRef.current.mutate(channelId);
         }
+
+        // Notify parent app about the new message
+        notifyParentApp(data.message);
       }
     };
 
-    // Fix: Change the event name from "channel_message_updated" to "message_updated"
+    // Enhanced message update handler
     const handleMessageUpdated = (data: {
       message: Message;
       channelId: string;
@@ -198,7 +246,7 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
     };
 
     socket.on("new_channel_message", handleNewMessage);
-    socket.on("message_updated", handleMessageUpdated); // Fixed: was "channel_message_updated"
+    socket.on("message_updated", handleMessageUpdated);
 
     // Join the channel room only once when component mounts
     socket.emit(
@@ -213,7 +261,7 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
 
     return () => {
       socket.off("new_channel_message", handleNewMessage);
-      socket.off("message_updated", handleMessageUpdated); // Fixed: was "channel_message_updated"
+      socket.off("message_updated", handleMessageUpdated);
 
       // Leave the channel room when component unmounts
       socket.emit("leave_channel", { channelId });
@@ -259,6 +307,22 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
       socket.emit("leave_channel_room", { channelId });
     };
   }, [socket, channelId]);
+
+  // Handle mark as read from parent app
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleMarkAsRead = () => {
+      if (channelId && messenger && isReady) {
+        markAsReadRef.current.mutate(channelId);
+        messenger.notifyMessagesRead();
+      }
+    };
+
+    window.addEventListener("chat:markAsRead", handleMarkAsRead);
+    return () =>
+      window.removeEventListener("chat:markAsRead", handleMarkAsRead);
+  }, [channelId, messenger, isReady]);
 
   const currentAttachmentIds = useMemo(() => {
     return uploadedAttachments.map((a) => a._id);
@@ -530,7 +594,7 @@ export default function ChannelWindow({ channelId }: ChannelWindowProps) {
                   <ChatMessage
                     message={messageWithReactions}
                     onReply={handleReply}
-                    onPreviewAttachment={handlePreviewAttachment} // Add this line
+                    onPreviewAttachment={handlePreviewAttachment}
                   />
                 </Fragment>
               );

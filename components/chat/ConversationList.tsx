@@ -42,8 +42,8 @@ export default function ConversationList() {
   const router = useRouter();
   const pathname = usePathname();
   const { user: currentUser } = useAuthStore();
-
   const { messenger, isReady } = useChatMessenger();
+
   // Get user IDs for presence tracking
   const dmUserIds = useMemo(() => {
     return (
@@ -84,25 +84,36 @@ export default function ConversationList() {
     return message.content;
   };
 
+  // Helper function to get sender name from message
   const getSenderName = (message: Message): string => {
     if (typeof message.senderId === "object") {
       return message.senderId.displayName || "Someone";
     }
-
     return message.sender?.displayName || "Someone";
   };
 
-  const notifyIframingParentApp = (
+  // Enhanced notification function that properly handles both DMs and channels
+  const notifyParentApp = (
     message: Message,
     conversationType: "dm" | "channel",
     conversationId: string,
   ) => {
+    // Don't notify for own messages or when messenger not ready
     if (!messenger || !isReady || message.senderId === currentUser?._id) {
-      return; // Don't notify for own messages or when messenger not ready
+      return;
     }
 
     const senderName = getSenderName(message);
 
+    // Update unread count in messenger cache
+    const currentUnreadCount =
+      conversationType === "dm"
+        ? getDirectMessageUnreadCount(conversationId)
+        : getChannelUnreadCount(conversationId);
+
+    messenger.updateUnreadCount(conversationId, currentUnreadCount);
+
+    // Notify parent app
     messenger.notifyNewMessage({
       messageId: message._id,
       sender: senderName,
@@ -112,64 +123,84 @@ export default function ConversationList() {
       channelId: conversationType === "channel" ? conversationId : undefined,
       conversationType,
     });
+
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[ConversationList] Notified parent about new ${conversationType} message:`,
+        {
+          conversationId,
+          sender: senderName,
+          preview: message.content.substring(0, 30),
+          unreadCount: currentUnreadCount,
+        },
+      );
+    }
   };
+
   // Combine and sort all conversations by last activity
   const unifiedConversations = [
     // Map direct messages to a common format
     ...directMessages.map((dm) => {
       const otherUser = getOtherParticipant(dm);
       const userPresence = dmUsersPresence[otherUser?._id || ""];
+      const unreadCount = getDirectMessageUnreadCount(dm._id);
 
       return {
         id: dm._id,
-        type: "dm",
+        type: "dm" as const,
         name: otherUser?.displayName || "Unknown",
         lastActivity: new Date(dm.lastActivity),
         avatar: otherUser?.avatarUrl,
         preview: getLastMessagePreview(dm),
-        unreadCount: getDirectMessageUnreadCount(dm._id),
+        unreadCount,
         channelType: null,
         originalData: dm,
-        userId: otherUser?._id, // For presence tracking
+        userId: otherUser?._id,
         userPresence,
       };
     }),
 
     // Map channels to the same format
-    ...channels.map((channel) => ({
-      id: channel._id,
-      type: "channel",
-      name: channel.name,
-      lastActivity: channel.lastActivity
-        ? new Date(channel.lastActivity)
-        : new Date(0),
-      avatar: null,
-      preview: channel.lastMessage
-        ? getLastMessagePreview(channel)
-        : channel.description || `A ${channel.type} channel`,
-      unreadCount: getChannelUnreadCount(channel._id),
-      channelType: channel.type,
-      originalData: channel,
-      userId: null,
-      userPresence: null,
-    })),
+    ...channels.map((channel) => {
+      const unreadCount = getChannelUnreadCount(channel._id);
+
+      return {
+        id: channel._id,
+        type: "channel" as const,
+        name: channel.name,
+        lastActivity: channel.lastActivity
+          ? new Date(channel.lastActivity)
+          : new Date(0),
+        avatar: null,
+        preview: channel.lastMessage
+          ? getLastMessagePreview(channel)
+          : channel.description || `A ${channel.type} channel`,
+        unreadCount,
+        channelType: channel.type,
+        originalData: channel,
+        userId: null,
+        userPresence: null,
+      };
+    }),
   ].sort((a, b) => b.lastActivity.getTime() - a.lastActivity.getTime());
 
   const { socket } = useSocket();
   const queryClient = useQueryClient();
 
+  // Enhanced socket listeners with proper notifications for both DMs and channels
   useEffect(() => {
     if (!socket) return;
 
     const handleNewDirectMessage = (data: { message: Message }) => {
+      // Update query cache
       queryClient.invalidateQueries({ queryKey: ["direct-messages"] });
 
-      if (data.message.directMessageId) {
-        notifyIframingParentApp(
-          data.message,
-          "dm",
-          data.message.directMessageId,
-        );
+      // Notify parent app about new DM (only if not from current user)
+      if (
+        data.message.directMessageId &&
+        data.message.senderId !== currentUser?._id
+      ) {
+        notifyParentApp(data.message, "dm", data.message.directMessageId);
       }
     };
 
@@ -177,34 +208,226 @@ export default function ConversationList() {
       // Update channels list when a new message arrives
       queryClient.invalidateQueries({ queryKey: ["channels"] });
 
-      if (data.message.channelId) {
-        notifyIframingParentApp(
-          data.message,
-          "channel",
-          data.message.channelId,
-        );
+      // Notify parent app about new channel message (only if not from current user)
+      if (
+        data.message.channelId &&
+        data.message.senderId !== currentUser?._id
+      ) {
+        notifyParentApp(data.message, "channel", data.message.channelId);
       }
     };
 
+    // Enhanced message update handlers
+    const handleDirectMessageUpdated = (data: {
+      message: Message;
+      directMessageId: string;
+    }) => {
+      console.log("Direct message updated in ConversationList:", data);
+      queryClient.invalidateQueries({ queryKey: ["direct-messages"] });
+    };
+
+    const handleChannelMessageUpdated = (data: {
+      message: Message;
+      channelId: string;
+    }) => {
+      console.log("Channel message updated in ConversationList:", data);
+      queryClient.invalidateQueries({ queryKey: ["channels"] });
+    };
+
+    // Enhanced reaction update handlers
+    const handleReactionUpdate = (data: {
+      messageId: string;
+      reactions: any[];
+      conversationType: "dm" | "channel";
+      conversationId: string;
+    }) => {
+      console.log("Reaction updated in ConversationList:", data);
+
+      // Update the appropriate query based on conversation type
+      if (data.conversationType === "dm") {
+        queryClient.invalidateQueries({ queryKey: ["direct-messages"] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["channels"] });
+      }
+    };
+
+    // User activity updates (typing, presence, etc.)
+    const handleUserActivity = (data: {
+      userId: string;
+      activity: string;
+      conversationId?: string;
+      conversationType?: "dm" | "channel";
+    }) => {
+      if (process.env.NODE_ENV === "development") {
+        console.log("User activity update in ConversationList:", data);
+      }
+
+      // Could trigger UI updates for typing indicators, etc.
+      // For now, we'll just log it
+    };
+
+    // Unread count updates from server
+    const handleUnreadCountUpdate = (data: {
+      conversationId: string;
+      conversationType: "dm" | "channel";
+      unreadCount: number;
+    }) => {
+      console.log("Unread count updated:", data);
+
+      // Update queries to refresh unread counts
+      if (data.conversationType === "dm") {
+        queryClient.invalidateQueries({ queryKey: ["direct-messages"] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["channels"] });
+      }
+
+      // Update messenger cache
+      if (messenger && isReady) {
+        messenger.updateUnreadCount(data.conversationId, data.unreadCount);
+      }
+    };
+
+    // Register all socket event listeners
     socket.on("new_direct_message", handleNewDirectMessage);
     socket.on("new_channel_message", handleNewChannelMessage);
+    socket.on("message_updated", handleDirectMessageUpdated);
+    socket.on("channel_message_updated", handleChannelMessageUpdated);
+    socket.on("message_reaction_updated", handleReactionUpdate);
+    socket.on("user_activity", handleUserActivity);
+    socket.on("unread_count_updated", handleUnreadCountUpdate);
 
     return () => {
       socket.off("new_direct_message", handleNewDirectMessage);
       socket.off("new_channel_message", handleNewChannelMessage);
+      socket.off("message_updated", handleDirectMessageUpdated);
+      socket.off("channel_message_updated", handleChannelMessageUpdated);
+      socket.off("message_reaction_updated", handleReactionUpdate);
+      socket.off("user_activity", handleUserActivity);
+      socket.off("unread_count_updated", handleUnreadCountUpdate);
     };
-  }, [socket, queryClient]);
+  }, [socket, queryClient, messenger, isReady, currentUser?._id]);
 
+  // Handle mark as read from parent app
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleMarkAsRead = (event: Event) => {
+      // When parent requests mark as read, we can optionally clear notifications
+      if (messenger && isReady) {
+        messenger.notifyMessagesRead();
+      }
+
+      // Could also trigger specific conversation to be marked as read
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.conversationId) {
+        const { conversationId, conversationType } = customEvent.detail;
+
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `[ConversationList] Marking ${conversationType} ${conversationId} as read`,
+          );
+        }
+
+        // Update local state or trigger re-fetch
+        if (conversationType === "dm") {
+          queryClient.invalidateQueries({ queryKey: ["direct-messages"] });
+        } else {
+          queryClient.invalidateQueries({ queryKey: ["channels"] });
+        }
+      }
+    };
+
+    // Enhanced user info update handler
+    const handleUserInfoUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.userInfo) {
+        console.log("User info updated:", customEvent.detail.userInfo);
+        // Could update local user cache or trigger UI updates
+      }
+    };
+
+    // Theme update handler
+    const handleThemeUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.theme) {
+        console.log("Theme updated:", customEvent.detail.theme);
+        // Apply theme changes if needed
+      }
+    };
+
+    window.addEventListener("chat:markAsRead", handleMarkAsRead);
+    window.addEventListener("chat:userInfoUpdate", handleUserInfoUpdate);
+    window.addEventListener("chat:themeUpdate", handleThemeUpdate);
+
+    return () => {
+      window.removeEventListener("chat:markAsRead", handleMarkAsRead);
+      window.removeEventListener("chat:userInfoUpdate", handleUserInfoUpdate);
+      window.removeEventListener("chat:themeUpdate", handleThemeUpdate);
+    };
+  }, [messenger, isReady, queryClient]);
+
+  // Update parent app with total unread count when it changes AND sync individual conversation counts
   useEffect(() => {
     if (!messenger || !isReady) return;
 
+    // Update individual conversation unread counts in messenger cache
+    unifiedConversations.forEach((conv) => {
+      if (conv.unreadCount > 0) {
+        messenger.updateUnreadCount(conv.id, conv.unreadCount);
+      } else {
+        messenger.clearUnreadCount(conv.id);
+      }
+    });
+
+    // Calculate and send total unread count
     const totalUnreadCount = unifiedConversations.reduce((total, conv) => {
       return total + conv.unreadCount;
     }, 0);
 
-    // Update parent with current unread count
     messenger.updateMessageCount(totalUnreadCount);
+
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[ConversationList] Updated parent with total unread count: ${totalUnreadCount}`,
+        {
+          conversations: unifiedConversations.length,
+          withUnread: unifiedConversations.filter((c) => c.unreadCount > 0)
+            .length,
+        },
+      );
+    }
   }, [unifiedConversations, messenger, isReady]);
+
+  // Sync conversation data with parent app periodically
+  useEffect(() => {
+    if (!messenger || !isReady) return;
+
+    const syncInterval = setInterval(() => {
+      // Send conversation list summary to parent
+      const conversationSummary = unifiedConversations.map((conv) => ({
+        id: conv.id,
+        type: conv.type,
+        name: conv.name,
+        unreadCount: conv.unreadCount,
+        lastActivity: conv.lastActivity.getTime(),
+        preview: conv.preview.substring(0, 50),
+      }));
+
+      // You could send this to parent app if needed
+      if (
+        process.env.NODE_ENV === "development" &&
+        conversationSummary.length > 0
+      ) {
+        console.log(
+          "[ConversationList] Conversation summary:",
+          conversationSummary,
+        );
+      }
+    }, 30000); // Every 30 seconds
+
+    return () => clearInterval(syncInterval);
+  }, [unifiedConversations, messenger, isReady]);
+
   const isLoading = loadingDMs || loadingUsers || loadingChannels;
 
   if (isLoading) {
@@ -256,7 +479,7 @@ export default function ConversationList() {
         return (
           <div
             key={`${conversation.type}-${conversation.id}`}
-            className={`p-4 hover:bg-accent cursor-pointer ${
+            className={`p-4 hover:bg-accent cursor-pointer transition-colors ${
               isActive ? "bg-accent" : ""
             }`}
             onClick={() =>
