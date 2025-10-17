@@ -62,6 +62,14 @@ export function useLogin() {
         expires: refreshTokenExpiry,
       });
 
+      const defaultTenant = {
+        tenantId: user.tenantId || "default",
+        name: "Default Tenant",
+        domain: "",
+        allowedOrigins: [],
+        status: "verified" as const,
+      };
+
       // Update Zustand store
       actions.login(
         user,
@@ -69,6 +77,7 @@ export function useLogin() {
         refreshToken,
         expiresIn,
         expiresIn === "30d",
+        defaultTenant,
       );
 
       queryClient.invalidateQueries({ queryKey: ["user"] });

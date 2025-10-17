@@ -29,6 +29,10 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname === "/embed") {
+    return NextResponse.next();
+  }
+
   const token = request.cookies.get("token")?.value;
   const refreshToken = request.cookies.get("refreshToken")?.value;
 

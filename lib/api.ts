@@ -69,8 +69,12 @@ const clearAuthAndRedirect = () => {
 
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token;
+  const tenantId = useAuthStore.getState().tenantId;
   if (token && !isTokenExpired(token)) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  if (tenantId) {
+    config.headers["X-Tenant-ID"] = tenantId;
   }
   return config;
 });

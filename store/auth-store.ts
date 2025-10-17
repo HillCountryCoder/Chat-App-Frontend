@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import { User } from "@/types/user";
+import { Tenant } from "@/types/tenant";
 
 interface AuthState {
   user: User | null;
@@ -11,6 +12,8 @@ interface AuthState {
   isLoading: boolean;
   expiresIn: string | null;
   _hasHydrated: boolean; // Track hydration status
+  tenantId: string | null;
+  tenant: Tenant | null;
   sessionInfo: {
     loginTime: string | null;
     rememberMe: boolean;
@@ -28,6 +31,7 @@ interface AuthState {
       refreshToken: string,
       expiresIn: string,
       rememberMe?: boolean,
+      tenant?: Tenant,
     ) => void;
     logout: () => void;
     updateTokens: (accessToken: string, refreshToken: string) => void;
@@ -44,6 +48,8 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       expiresIn: null,
       _hasHydrated: false,
+      tenantId: null,
+      tenant: null,
       sessionInfo: {
         loginTime: null,
         rememberMe: false,
@@ -87,12 +93,18 @@ export const useAuthStore = create<AuthState>()(
           set((state) => {
             state._hasHydrated = hasHydrated;
           }),
+        setTenant: (tenant: Tenant | null) =>
+          set((state) => {
+            state.tenant = tenant;
+            state.tenantId = tenant?.tenantId || null;
+          }),
         login: (
           user,
           accessToken,
           refreshToken,
           expiresIn,
           rememberMe = false,
+          tenant,
         ) =>
           set((state) => {
             console.log("🔄 Auth Store: Login called");
@@ -101,6 +113,8 @@ export const useAuthStore = create<AuthState>()(
             state.refreshToken = refreshToken;
             state.expiresIn = expiresIn;
             state.isAuthenticated = true; // Always true on login
+            state.tenant = tenant || null;
+            state.tenantId = tenant?.tenantId || user.tenantId || "default";
             state.sessionInfo = {
               loginTime: new Date().toISOString(),
               rememberMe,
@@ -119,6 +133,8 @@ export const useAuthStore = create<AuthState>()(
             state.refreshToken = null;
             state.expiresIn = null;
             state.isAuthenticated = false;
+            state.tenant = null;
+            state.tenantId = null;
             state.sessionInfo = {
               loginTime: null,
               rememberMe: false,

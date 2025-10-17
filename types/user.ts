@@ -6,6 +6,9 @@ export interface User {
   avatarUrl?: string;
   status: UserStatus;
   lastSeen?: string;
+  tenantId: string;
+  externalId?: string;
+  externalSystem?: string;
 }
 
 export enum UserStatus {

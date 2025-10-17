@@ -28,10 +28,10 @@ export const initializeSocket = (): Socket => {
 export const connectSocket = (): Socket => {
   const token = useAuthStore.getState().token;
   const socket = initializeSocket();
-
+  const tenantId = useAuthStore.getState().tenantId;
   // Always update auth with latest token before connecting
   if (token) {
-    socket.auth = { token };
+    socket.auth = { token, tenantId };
     if (!socket.connected) {
       socket.connect();
     }
