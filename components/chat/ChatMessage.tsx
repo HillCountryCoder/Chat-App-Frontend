@@ -346,7 +346,7 @@ export default function ChatMessage({
               className={cn(
                 "relative rounded-2xl transition-colors overflow-hidden",
                 isOwnMessage
-                  ? "bg-chat-message-bg text-chat-message-fg rounded-br-none"
+                  ? `bg-chat-message-bg text-chat-message-fg rounded-br-none`
                   : "bg-muted text-foreground rounded-bl-none",
                 isActive && "shadow-[inset_0_0_0_1000px_rgba(0,0,0,0.2)]",
                 // Always add padding - remove the conditional padding
@@ -414,7 +414,7 @@ export default function ChatMessage({
                           minHeight={60}
                           maxHeight={200}
                           submitOnEnter={false}
-                          className="border border-primary/20"
+                          className="border border-primary/20 text-black"
                         />
                       ) : (
                         <textarea

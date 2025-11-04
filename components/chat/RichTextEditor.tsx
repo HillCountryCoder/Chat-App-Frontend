@@ -129,6 +129,7 @@ export function RichTextEditor({
                 "px-3 py-2 text-sm leading-relaxed",
                 "focus:outline-none",
                 "placeholder:text-muted-foreground",
+                "light:text-black",
                 disabled && "opacity-50 cursor-not-allowed",
                 // Ensure text selection works properly
                 "select-text [&_*]:select-text",

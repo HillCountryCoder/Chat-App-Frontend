@@ -84,6 +84,8 @@
 @layer base {
   :root {
     --primary-chat: hsl(215 100% 50%);
+    /* convert this foregorund chat color to black */
+    /* --primary-foreground-chat: hsl(0 0% 0%); */
     --primary-foreground-chat: hsl(0 0% 100%);
     --muted-chat: hsl(0 0% 96%);
     --muted-foreground-chat: hsl(0 0% 45%);
