@@ -13,6 +13,7 @@ const isInIframe = typeof window !== "undefined" && window !== window.parent;
 
 export const api = axios.create({
   baseURL: `${API_URL}/api`,
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
@@ -49,12 +50,19 @@ const processQueue = (error: any = null, token: string | null = null) => {
   failedQueue = [];
 };
 
+// Clear auth data from store
+useAuthStore.getState().actions.logout();
 const clearAuthAndRedirect = () => {
-  // Clear auth data
-  useAuthStore.getState().actions.logout();
-
-  // Only clear cookies if not in iframe (to prevent conflicts)
-  if (!isInIframe) {
+  // Clear tokens based on environment
+  if (isInIframe) {
+    // Iframe: Clear localStorage instead of cookies
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("chat_access_token");
+      localStorage.removeItem("chat_refresh_token");
+      console.log("🧹 [Iframe] Cleared tokens from localStorage");
+    }
+  } else {
+    // Main app: Clear cookies
     Cookies.remove("token");
     Cookies.remove("refreshToken");
   }
@@ -63,19 +71,47 @@ const clearAuthAndRedirect = () => {
   if (!isInIframe && !window.location.pathname.includes("/login")) {
     window.location.href = "/login";
   } else if (isInIframe) {
-    console.log("🔄 Iframe: Auth cleared, parent should handle navigation");
+    console.log(
+      "🔄 [Iframe] Auth cleared, parent should handle re-authentication",
+    );
+    // Optionally notify parent
+    window.parent.postMessage(
+      {
+        source: "chat-app",
+        type: "AUTH_EXPIRED",
+        timestamp: Date.now(),
+      },
+      "*",
+    );
   }
 };
 
 api.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token;
-  const tenantId = useAuthStore.getState().tenantId;
+  // First try to get token from Zustand store
+  let token = useAuthStore.getState().token;
+
+  // If in iframe and no token in store, try localStorage
+  if (!token && isInIframe && typeof window !== "undefined") {
+    token = Cookies.get("token") ?? null;
+    console.log("📦 [Iframe] Retrieved token from localStorage");
+  }
+
+  // Validate token is not expired
   if (token && !isTokenExpired(token)) {
     config.headers.Authorization = `Bearer ${token}`;
+  } else if (token) {
+    console.warn("⚠️ Token is expired, clearing");
+    if (isInIframe) {
+      localStorage.removeItem("chat_access_token");
+      localStorage.removeItem("chat_refresh_token");
+    }
   }
+
+  const tenantId = useAuthStore.getState().tenantId;
   if (tenantId) {
     config.headers["X-Tenant-ID"] = tenantId;
   }
+
   return config;
 });
 
@@ -125,9 +161,20 @@ api.interceptors.response.use(
       !originalRequest._retry &&
       !isRateLimited
     ) {
-      // IFRAME STRATEGY: Don't attempt refresh, just clear auth
       if (isInIframe) {
-        console.log("🚫 401 in iframe - not attempting refresh, clearing auth");
+        console.log("🚫 [Iframe] 401 error - checking localStorage token");
+
+        const storedToken = getTokenFromStorage();
+        if (storedToken) {
+          // Try one more time with stored token
+          console.log("🔄 [Iframe] Retrying with localStorage token");
+          originalRequest.headers.Authorization = `Bearer ${storedToken}`;
+          originalRequest._retry = true;
+          return api(originalRequest);
+        }
+
+        // No valid token, clear auth
+        console.log("🚫 [Iframe] No valid token, clearing auth");
         clearAuthAndRedirect();
         return Promise.reject(error);
       }
@@ -237,7 +284,9 @@ export async function apiRequest<T = any>(
   config: AxiosRequestConfig,
 ): Promise<T> {
   try {
+    console.log("🔄 API requests making to backend SSO");
     const response = await api(config);
+    console.log("✅ API request successful:", response);
     return response.data;
   } catch (error) {
     if (error instanceof BaseError) {
@@ -258,4 +307,18 @@ export const apiClient = {
     apiRequest<T>({ ...config, method: "PATCH", url, data }),
   delete: <T = any>(url: string, config?: AxiosRequestConfig) =>
     apiRequest<T>({ ...config, method: "DELETE", url }),
+};
+const getTokenFromStorage = (): string | null => {
+  if (!isInIframe || typeof window === "undefined") return null;
+
+  const token = localStorage.getItem("chat_access_token");
+  if (token && !isTokenExpired(token)) {
+    return token;
+  }
+
+  // Token expired or missing
+  if (token) {
+    localStorage.removeItem("chat_access_token");
+  }
+  return null;
 };

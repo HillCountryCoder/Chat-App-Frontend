@@ -144,13 +144,11 @@ export const useAuthStore = create<AuthState>()(
               "✅ Auth Store: Logout completed, isAuthenticated set to false",
             );
           }),
-        // 🔥 FIX: This was the main issue!
         updateTokens: (accessToken, refreshToken) =>
           set((state) => {
             console.log("🔄 Auth Store: Updating tokens");
             state.token = accessToken;
             state.refreshToken = refreshToken;
-            // 🔥 CRITICAL FIX: Set isAuthenticated to true when updating tokens
             state.isAuthenticated = true;
             console.log(
               "✅ Auth Store: Tokens updated, isAuthenticated set to true",

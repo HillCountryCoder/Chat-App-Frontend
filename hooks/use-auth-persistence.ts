@@ -129,40 +129,85 @@ export function useAuthPersistence() {
         }
 
         // IFRAME STRATEGY: Be very conservative
+        // IFRAME STRATEGY: Allow refresh attempts
         if (isInIframe) {
-          // Prevent multiple attempts in the same iframe session
-          if (iframeInitialized) {
-            console.log("🚫 Iframe already initialized, skipping");
-            return;
-          }
-
-          iframeInitialized = true;
-
-          // Strategy 1: Check if we have a valid access token in cookies
+          // Check if we have a valid access token in cookies
           if (cookieToken && !isTokenExpired(cookieToken)) {
             console.log("✅ Found valid access token in iframe, using it");
             actions.setToken(cookieToken);
 
-            // Also restore refresh token if available
             if (cookieRefreshToken && !refreshToken) {
               actions.setRefreshToken(cookieRefreshToken);
             }
 
-            // Set API headers
             api.defaults.headers.common[
               "Authorization"
             ] = `Bearer ${cookieToken}`;
             return;
           }
 
-          // Strategy 2: If no valid access token, DON'T attempt refresh in iframe
-          console.log("⚠️ No valid token in iframe, requiring fresh login");
+          // If access token expired but refresh token exists, attempt refresh
+          if (
+            cookieRefreshToken &&
+            (!cookieToken || isTokenExpired(cookieToken))
+          ) {
+            console.log("🔄 [Iframe] Access token expired, attempting refresh");
 
-          // Clear any stale auth data
+            try {
+              const response = await api.post("/auth/refresh", {
+                refreshToken: cookieRefreshToken,
+              });
+
+              if (response.status === 200 && response.data?.accessToken) {
+                const data = response.data;
+
+                const cookieOptions = {
+                  path: "/",
+                  sameSite: "none" as const,
+                  secure: true,
+                  partitioned: true,
+                };
+
+                const accessTokenExpiry = getExpiryDays(
+                  data.accessTokenExpiresIn || "15m",
+                );
+                const refreshTokenExpiry = getExpiryDays(
+                  data.refreshTokenExpiresIn || "7d",
+                );
+
+                Cookies.set("token", data.accessToken, {
+                  ...cookieOptions,
+                  expires: accessTokenExpiry,
+                });
+                Cookies.set("refreshToken", data.refreshToken, {
+                  ...cookieOptions,
+                  expires: refreshTokenExpiry,
+                });
+
+                actions.updateTokens(data.accessToken, data.refreshToken);
+
+                if (data.user) {
+                  actions.setUser(data.user);
+                }
+
+                api.defaults.headers.common[
+                  "Authorization"
+                ] = `Bearer ${data.accessToken}`;
+
+                console.log("✅ [Iframe] Token refresh successful");
+                return;
+              }
+            } catch (error: any) {
+              console.error("❌ [Iframe] Token refresh failed:", error);
+              // Fall through to logout
+            }
+          }
+
+          // No valid tokens available
+          console.log(
+            "⚠️ [Iframe] No valid tokens, requiring fresh authentication",
+          );
           actions.logout();
-
-          // Don't redirect in iframe, let the component handle login UI
-          console.log("💡 Iframe needs authentication - will show login UI");
           return;
         }
 

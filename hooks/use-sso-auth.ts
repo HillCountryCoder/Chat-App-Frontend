@@ -11,6 +11,7 @@ export function useSSOAuth() {
 
   return useMutation({
     mutationFn: async (data: { token: string; signature: string }) => {
+      console.log("🔄 Calling SSO init API with data:", data);
       const response = await apiClient.post<SSOInitResponse>(
         "/tenants/sso/init",
         data,
@@ -26,7 +27,6 @@ export function useSSOAuth() {
         refreshTokenExpiresIn,
         tenant,
       } = data;
-
       const isInIframe =
         typeof window !== "undefined" && window !== window.parent;
       const cookieOptions = {
@@ -44,6 +44,7 @@ export function useSSOAuth() {
         expires: accessTokenExpiry,
       });
 
+      console.log("✅ SSO init successful, processing response:", tenant, user);
       Cookies.set("refreshToken", refreshToken, {
         ...cookieOptions,
         expires: refreshTokenExpiry,
@@ -67,7 +68,11 @@ export function useSSOAuth() {
         allowedOrigins: [],
         status: "verified" as const,
       };
-
+      console.log(
+        "👤 Full user data prepared for login SSO:",
+        fullUser,
+        tenantData,
+      );
       actions.login(
         fullUser,
         accessToken,
