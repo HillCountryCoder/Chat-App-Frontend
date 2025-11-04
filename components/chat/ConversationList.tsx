@@ -19,6 +19,7 @@ import { useSocket } from "@/providers/socket-provider";
 import { PresenceAwareAvatar } from "@/components/presence/PresenceAwareAvatar";
 import { useUserPresence } from "@/hooks/use-presence";
 import { useChatMessenger } from "@/providers/chat-messenger-provider";
+import { extractPlainText } from "@/utils/rich-text";
 
 export default function ConversationList() {
   const {
@@ -76,12 +77,17 @@ export default function ConversationList() {
     if (!dm.lastMessage) return "No messages yet";
 
     const message = dm.lastMessage;
-
-    if (isOwnMessage(message)) {
-      return `You: ${message.content}`;
+    let messageText = message.content;
+    if (message.contentType === "rich" && message.richContent) {
+      messageText = extractPlainText(message.richContent);
     }
 
-    return message.content;
+    const editedIndicator = message.isEdited ? " (edited)" : "";
+    if (isOwnMessage(message)) {
+      return `You: ${messageText}${editedIndicator}`;
+    }
+
+    return `${messageText}${editedIndicator}`;
   };
 
   // Helper function to get sender name from message
@@ -241,7 +247,9 @@ export default function ConversationList() {
                   richContent: data.message.richContent,
                   contentType: data.message.contentType,
                   isEdited: true,
+                  updatedAt: data.message.editedAt || new Date().toISOString(),
                 },
+                lastActivity: new Date(),
               };
             }
             return dm;
