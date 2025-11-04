@@ -83,7 +83,7 @@ export function useSendMessage() {
                 } else {
                   reject(new Error(response.error || "Failed to send message"));
                 }
-              },
+              }
             );
           } else {
             reject(new Error("No target specified for message"));
@@ -188,7 +188,7 @@ export function useUsers(searchQuery: string = "") {
 // New hook for rich content statistics
 export function useRichContentStats(
   directMessageId?: string,
-  channelId?: string,
+  channelId?: string
 ) {
   const endpoint = directMessageId
     ? `/direct-messages/${directMessageId}/stats/rich-content`
@@ -213,8 +213,66 @@ export function useRichContentStats(
 export function useEditMessage() {
   const { socket } = useSocket();
   const queryClient = useQueryClient();
+  // method to return previous messages
+  const getPreviousMessages = (
+    variables: { directMessageId?: string, channelId?: string }
+  ) => {
+    const { directMessageId, channelId } = variables;
+    if (channelId) {
+      return queryClient.getQueryData<Message[]>([
+        "messages",
+        "channel",
+        channelId,
+      ]);
+    }
+    return queryClient.getQueryData<Message[]>([
+      "messages",
+      "direct",
+      directMessageId,
+    ]);
+  };
 
-  return useMutation({
+  const setMessages = (message: Message, editingMode: "rich" | "text", content: string, editingRichContent: Value) => {
+    if (message.channelId) {
+      return queryClient.setQueryData(
+        ["messages", "channel", message.channelId],
+        (old: Message[] | undefined) => {
+          if (!old) return old;
+          return old.map((msg) =>
+            msg._id === message._id
+              ? {
+                  ...msg,
+                  content,
+                  richContent: editingMode === "rich" ? editingRichContent : undefined,
+                  contentType: editingMode === "rich" ? "rich" : "text",
+                  isEdited: true,
+                }
+              : msg
+          );
+        }
+      );
+    }
+    return queryClient.setQueryData(
+      ["messages", "direct", message.directMessageId],
+      (old: Message[] | undefined) => {
+        if (!old) return old;
+        return old.map((msg) =>
+          msg._id === message._id
+            ? {
+                ...msg,
+                content,
+                richContent: editingMode === "rich" ? editingRichContent : undefined,
+                contentType: editingMode === "rich" ? "rich" : "text",
+                isEdited: true,
+              }
+            : msg
+        );
+      }
+    )
+  }
+
+  const setQueryData = queryClient.setQueryData;
+  const mutation = useMutation({
     mutationFn: async ({
       messageId,
       content,
@@ -303,4 +361,5 @@ export function useEditMessage() {
       });
     },
   });
+  return { ...mutation, getPreviousMessages, setMessages, setQueryData };
 }

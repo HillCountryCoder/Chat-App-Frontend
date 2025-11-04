@@ -96,7 +96,7 @@ export default function ConversationList() {
   const notifyParentApp = (
     message: Message,
     conversationType: "dm" | "channel",
-    conversationId: string,
+    conversationId: string
   ) => {
     // Don't notify for own messages or when messenger not ready
     if (!messenger || !isReady || message.senderId === currentUser?._id) {
@@ -132,7 +132,7 @@ export default function ConversationList() {
           sender: senderName,
           preview: message.content.substring(0, 30),
           unreadCount: currentUnreadCount,
-        },
+        }
       );
     }
   };
@@ -223,7 +223,35 @@ export default function ConversationList() {
       directMessageId: string;
     }) => {
       console.log("Direct message updated in ConversationList:", data);
-      queryClient.invalidateQueries({ queryKey: ["direct-messages"] });
+      queryClient.setQueryData(
+        ["direct-messages"],
+        (oldData: DirectMessage[] | undefined) => {
+          if (!oldData) return oldData;
+
+          return oldData.map((dm) => {
+            if (
+              dm._id === data.directMessageId &&
+              dm.lastMessage?._id === data.message._id
+            ) {
+              return {
+                ...dm,
+                lastMessage: {
+                  ...dm.lastMessage,
+                  content: data.message.content,
+                  richContent: data.message.richContent,
+                  contentType: data.message.contentType,
+                  isEdited: true,
+                },
+              };
+            }
+            return dm;
+          });
+        }
+      );
+      queryClient.refetchQueries({
+        queryKey: ["direct-messages"],
+        exact: true,
+      });
     };
 
     const handleChannelMessageUpdated = (data: {
@@ -231,7 +259,38 @@ export default function ConversationList() {
       channelId: string;
     }) => {
       console.log("Channel message updated in ConversationList:", data);
-      queryClient.invalidateQueries({ queryKey: ["channels"] });
+
+      queryClient.setQueryData(
+        ["channels"],
+        (oldData: Channel[] | undefined) => {
+          if (!oldData) return oldData;
+
+          return oldData.map((channel) => {
+            if (
+              channel._id === data.channelId &&
+              channel.lastMessage?._id === data.message._id
+            ) {
+              return {
+                ...channel,
+                lastMessage: {
+                  ...channel.lastMessage,
+                  content: data.message.content,
+                  richContent: data.message.richContent,
+                  contentType: data.message.contentType,
+                  isEdited: true,
+                },
+              };
+            }
+            return channel;
+          });
+        }
+      );
+
+      // Still refetch in background to ensure consistency
+      queryClient.refetchQueries({
+        queryKey: ["channels"],
+        exact: true,
+      });
     };
 
     // Enhanced reaction update handlers
@@ -324,7 +383,7 @@ export default function ConversationList() {
 
         if (process.env.NODE_ENV === "development") {
           console.log(
-            `[ConversationList] Marking ${conversationType} ${conversationId} as read`,
+            `[ConversationList] Marking ${conversationType} ${conversationId} as read`
           );
         }
 
@@ -393,7 +452,7 @@ export default function ConversationList() {
           conversations: unifiedConversations.length,
           withUnread: unifiedConversations.filter((c) => c.unreadCount > 0)
             .length,
-        },
+        }
       );
     }
   }, [unifiedConversations, messenger, isReady]);
@@ -420,7 +479,7 @@ export default function ConversationList() {
       ) {
         console.log(
           "[ConversationList] Conversation summary:",
-          conversationSummary,
+          conversationSummary
         );
       }
     }, 30000); // Every 30 seconds

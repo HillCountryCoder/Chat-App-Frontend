@@ -38,7 +38,7 @@ interface ChatMessageProps {
   onReply?: (message: Message) => void;
   onPreviewAttachment?: (
     attachment: Attachment,
-    attachments?: Attachment[],
+    attachments?: Attachment[]
   ) => void;
 }
 
@@ -150,7 +150,7 @@ export default function ChatMessage({
           if (response.success) {
             setLocalReactions(response.reactions);
           }
-        },
+        }
       );
     } else {
       socket.emit(
@@ -160,7 +160,7 @@ export default function ChatMessage({
           if (response.success) {
             setLocalReactions(response.reactions);
           }
-        },
+        }
       );
     }
 
@@ -186,12 +186,12 @@ export default function ChatMessage({
 
   const readyAttachments =
     message.attachments?.filter(
-      (attachment) => attachment.status === "ready",
+      (attachment) => attachment.status === "ready"
     ) || [];
 
   const handlePreviewAttachment = (
     attachment: Attachment,
-    attachments?: Attachment[],
+    attachments?: Attachment[]
   ) => {
     if (onPreviewAttachment) {
       onPreviewAttachment(attachment, attachments);
@@ -218,8 +218,18 @@ export default function ChatMessage({
 
     if (!content && editingMode === "text") return;
     if (editingMode === "rich" && !hasContent(editingRichContent)) return;
-
+    const previousMessages = editMessageMutation.getPreviousMessages({
+      directMessageId: message.directMessageId,
+    });
     try {
+      editMessageMutation.setMessages(
+        message,
+        editingMode,
+        content,
+        editingRichContent
+      );
+      cancelEditing();
+      setIsEditingSameMessage(false);
       await editMessageMutation.mutateAsync({
         messageId: message._id,
         content,
@@ -228,11 +238,17 @@ export default function ChatMessage({
         directMessageId: message.directMessageId,
         channelId: message.channelId,
       });
-
-      cancelEditing();
-      setIsEditingSameMessage(false);
     } catch (error) {
       console.error("Failed to save edit:", error);
+      // Revert to previous messages on error
+      if (previousMessages) {
+        editMessageMutation.setQueryData(
+          ["messages", "direct", message.directMessageId],
+          previousMessages
+        );
+      }
+
+      startEditing(message);
     }
   };
 
@@ -255,7 +271,7 @@ export default function ChatMessage({
       className={cn(
         "group relative flex items-end mb-4",
         isOwnMessage ? "justify-end" : "justify-start",
-        isActive && "z-10",
+        isActive && "z-10"
       )}
       ref={messageRef}
       onMouseEnter={() => shouldShowTrigger && setShowActions(true)}
@@ -276,7 +292,7 @@ export default function ChatMessage({
       <div
         className={cn(
           "max-w-[65%]",
-          isOwnMessage ? "items-end" : "items-start",
+          isOwnMessage ? "items-end" : "items-start"
         )}
       >
         {/* Reply Preview */}
@@ -284,13 +300,13 @@ export default function ChatMessage({
           <div
             className={cn(
               "flex gap-2 mb-2",
-              isOwnMessage ? "justify-end" : "justify-start",
+              isOwnMessage ? "justify-end" : "justify-start"
             )}
           >
             <div
               className={cn(
                 "flex items-start gap-2 bg-muted/50 rounded-md p-2",
-                isOwnMessage ? "flex-row-reverse" : "flex-row",
+                isOwnMessage ? "flex-row-reverse" : "flex-row"
               )}
             >
               <div className="w-1 bg-primary/50 rounded-full shrink-0" />
@@ -334,14 +350,14 @@ export default function ChatMessage({
                   : "bg-muted text-foreground rounded-bl-none",
                 isActive && "shadow-[inset_0_0_0_1000px_rgba(0,0,0,0.2)]",
                 // Always add padding - remove the conditional padding
-                "p-3",
+                "p-3"
               )}
             >
               {/* Media attachments - INSIDE the message bubble */}
               {readyAttachments.length > 0 && (
                 <div
                   className={cn(
-                    (hasTextContent || hasRichContent) && "mb-3 rounded-lg",
+                    (hasTextContent || hasRichContent) && "mb-3 rounded-lg"
                   )}
                 >
                   <AttachmentDisplay
@@ -440,7 +456,7 @@ export default function ChatMessage({
                   (hasTextContent ||
                     hasRichContent ||
                     readyAttachments.length > 0) &&
-                    "border-t border-black/10",
+                    "border-t border-black/10"
                 )}
               >
                 <div className="flex items-center gap-1 text-xs opacity-70">
@@ -475,7 +491,7 @@ export default function ChatMessage({
                 showActions || isEditing
                   ? "opacity-100"
                   : "opacity-0 group-hover:opacity-100",
-                isOwnMessage ? "order-1" : "order-2",
+                isOwnMessage ? "order-1" : "order-2"
               )}
             >
               {!isEditing && (
@@ -556,7 +572,7 @@ export default function ChatMessage({
         <div
           className={cn(
             "absolute -top-10",
-            isOwnMessage ? "right-0" : "left-10",
+            isOwnMessage ? "right-0" : "left-10"
           )}
           data-reaction-menu="true"
         >
