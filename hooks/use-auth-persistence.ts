@@ -31,7 +31,6 @@ const REFRESH_COOLDOWN = 60000; // 1 minute cooldown between attempts
 
 // Iframe-specific tracking - use more specific flags
 let iframeInitialized = false;
-let sessionRestoreAttempted = false;
 
 export function useAuthPersistence() {
   const { token, refreshToken, isAuthenticated, _hasHydrated, actions } =
@@ -73,7 +72,6 @@ export function useAuthPersistence() {
         }
         api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
       } else {
-        Cookies.remove("token");
         delete api.defaults.headers.common["Authorization"];
       }
 
@@ -101,14 +99,13 @@ export function useAuthPersistence() {
   // Session restoration - SINGLE useEffect with proper dependencies
   useEffect(() => {
     // Prevent multiple restoration attempts
-    if (!_hasHydrated || isRestoringRef.current || sessionRestoreAttempted) {
+    if (!_hasHydrated || isRestoringRef.current) {
       return;
     }
 
     const restoreSession = async () => {
       try {
         isRestoringRef.current = true;
-        sessionRestoreAttempted = true;
 
         const cookieToken = Cookies.get("token");
         const cookieRefreshToken = Cookies.get("refreshToken");
@@ -117,8 +114,14 @@ export function useAuthPersistence() {
           `🔍 Auth restoration - Environment: ${
             isInIframe ? "iframe" : "standalone"
           }`,
+          {
+            hasCookieToken: !!cookieToken,
+            hasCookieRefreshToken: !!cookieRefreshToken,
+            hasStoreToken: !!token,
+            hasStoreRefreshToken: !!refreshToken,
+            isAuthenticated,
+          }
         );
-
         // Check if we have a token in store that hasn't expired
         const hasNonExpiredToken = token && !isTokenExpired(token);
         const shouldSkipRestoration = hasNonExpiredToken && isAuthenticated;
@@ -169,10 +172,10 @@ export function useAuthPersistence() {
                 };
 
                 const accessTokenExpiry = getExpiryDays(
-                  data.accessTokenExpiresIn || "15m",
+                  data.accessTokenExpiresIn || "15m"
                 );
                 const refreshTokenExpiry = getExpiryDays(
-                  data.refreshTokenExpiresIn || "7d",
+                  data.refreshTokenExpiresIn || "7d"
                 );
 
                 Cookies.set("token", data.accessToken, {
@@ -205,15 +208,34 @@ export function useAuthPersistence() {
 
           // No valid tokens available
           console.log(
-            "⚠️ [Iframe] No valid tokens, requiring fresh authentication",
+            "⚠️ [Iframe] No valid tokens, requiring fresh authentication"
           );
           actions.logout();
           return;
         }
 
         // STANDALONE APP STRATEGY: Full restoration logic
-        console.log("🔄 Standalone app - proceeding with full restoration");
+       console.log("🔄 Standalone app - proceeding with full restoration");
 
+      // Restore tokens from cookies if missing from store
+      if (!token && cookieToken && !isTokenExpired(cookieToken)) {
+        console.log("♻️ Restoring tokens from cookies");
+        
+        // Use updateTokens to set both tokens AND authentication status
+        actions.updateTokens(
+          cookieToken, 
+          cookieRefreshToken || refreshToken || ""
+        );
+        
+        api.defaults.headers.common["Authorization"] = `Bearer ${cookieToken}`;
+        return;
+      }
+
+      // Restore ONLY refresh token if missing
+      if (!refreshToken && cookieRefreshToken && token) {
+        console.log("♻️ Restoring refresh token from cookies");
+        actions.setRefreshToken(cookieRefreshToken);
+      } 
         // Check cooldown period for refresh attempts
         const now = Date.now();
         if (now - lastRefreshAttempt < REFRESH_COOLDOWN) {
@@ -268,10 +290,10 @@ export function useAuthPersistence() {
 
               // Use proper expiry times from backend
               const accessTokenExpiry = getExpiryDays(
-                data.accessTokenExpiresIn || "15m",
+                data.accessTokenExpiresIn || "15m"
               );
               const refreshTokenExpiry = getExpiryDays(
-                data.refreshTokenExpiresIn || "7d",
+                data.refreshTokenExpiresIn || "7d"
               );
 
               // Update cookies with correct expiry times
@@ -323,17 +345,7 @@ export function useAuthPersistence() {
             console.log("Session restore failed, but not clearing auth yet");
           }
         }
-        // Restore valid access token if missing from store
-        else if (cookieToken && !token && !isTokenExpired(cookieToken)) {
-          actions.setToken(cookieToken);
-          api.defaults.headers.common[
-            "Authorization"
-          ] = `Bearer ${cookieToken}`;
-        }
-        // Restore refresh token if missing from store
-        else if (cookieRefreshToken && !refreshToken) {
-          actions.setRefreshToken(cookieRefreshToken);
-        }
+        
       } finally {
         isRestoringRef.current = false;
       }
