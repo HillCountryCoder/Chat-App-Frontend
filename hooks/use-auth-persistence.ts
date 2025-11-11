@@ -42,18 +42,6 @@ export function useAuthPersistence() {
 
   // Memoize cookie operations to prevent unnecessary re-runs
   const syncTokensWithCookies = useCallback(() => {
-    if (isInIframe) {
-      console.log("🚫 Skipping cookie sync in iframe mode");
-
-      // Only set API headers if we have a token
-      if (token) {
-        api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-      } else {
-        delete api.defaults.headers.common["Authorization"];
-      }
-      return;
-    }
-
     // Prevent multiple sync operations
     if (cookieSyncRef.current) return;
     cookieSyncRef.current = true;
@@ -97,6 +85,7 @@ export function useAuthPersistence() {
   }, [token, refreshToken]);
 
   // Session restoration - SINGLE useEffect with proper dependencies
+  // Session restoration - SINGLE useEffect with proper dependencies
   useEffect(() => {
     // Prevent multiple restoration attempts
     if (!_hasHydrated || isRestoringRef.current) {
@@ -110,18 +99,14 @@ export function useAuthPersistence() {
         const cookieToken = Cookies.get("token");
         const cookieRefreshToken = Cookies.get("refreshToken");
 
-        console.log(
-          `🔍 Auth restoration - Environment: ${
-            isInIframe ? "iframe" : "standalone"
-          }`,
-          {
-            hasCookieToken: !!cookieToken,
-            hasCookieRefreshToken: !!cookieRefreshToken,
-            hasStoreToken: !!token,
-            hasStoreRefreshToken: !!refreshToken,
-            isAuthenticated,
-          }
-        );
+        console.log("🔍 Auth restoration - Standalone app", {
+          hasCookieToken: !!cookieToken,
+          hasCookieRefreshToken: !!cookieRefreshToken,
+          hasStoreToken: !!token,
+          hasStoreRefreshToken: !!refreshToken,
+          isAuthenticated,
+        });
+
         // Check if we have a token in store that hasn't expired
         const hasNonExpiredToken = token && !isTokenExpired(token);
         const shouldSkipRestoration = hasNonExpiredToken && isAuthenticated;
@@ -214,28 +199,27 @@ export function useAuthPersistence() {
           return;
         }
 
-        // STANDALONE APP STRATEGY: Full restoration logic
-       console.log("🔄 Standalone app - proceeding with full restoration");
+        // Restore tokens from cookies if missing from store
+        if (!token && cookieToken && !isTokenExpired(cookieToken)) {
+          console.log("♻️ Restoring tokens from cookies");
 
-      // Restore tokens from cookies if missing from store
-      if (!token && cookieToken && !isTokenExpired(cookieToken)) {
-        console.log("♻️ Restoring tokens from cookies");
-        
-        // Use updateTokens to set both tokens AND authentication status
-        actions.updateTokens(
-          cookieToken, 
-          cookieRefreshToken || refreshToken || ""
-        );
-        
-        api.defaults.headers.common["Authorization"] = `Bearer ${cookieToken}`;
-        return;
-      }
+          actions.updateTokens(
+            cookieToken,
+            cookieRefreshToken || refreshToken || ""
+          );
 
-      // Restore ONLY refresh token if missing
-      if (!refreshToken && cookieRefreshToken && token) {
-        console.log("♻️ Restoring refresh token from cookies");
-        actions.setRefreshToken(cookieRefreshToken);
-      } 
+          api.defaults.headers.common[
+            "Authorization"
+          ] = `Bearer ${cookieToken}`;
+          return;
+        }
+
+        // Restore ONLY refresh token if missing
+        if (!refreshToken && cookieRefreshToken && token) {
+          console.log("♻️ Restoring refresh token from cookies");
+          actions.setRefreshToken(cookieRefreshToken);
+        }
+
         // Check cooldown period for refresh attempts
         const now = Date.now();
         if (now - lastRefreshAttempt < REFRESH_COOLDOWN) {
@@ -278,17 +262,12 @@ export function useAuthPersistence() {
             if (response.status === 200 && response.data?.accessToken) {
               const data = response.data;
 
-              // Cookie options based on environment
               const cookieOptions = {
                 path: "/",
-                sameSite: isInIframe ? ("none" as const) : ("lax" as const),
-                secure: isInIframe
-                  ? true
-                  : process.env.NODE_ENV === "production",
-                ...(isInIframe ? { partitioned: true } : {}),
+                sameSite: "lax" as const,
+                secure: process.env.NODE_ENV === "production",
               };
 
-              // Use proper expiry times from backend
               const accessTokenExpiry = getExpiryDays(
                 data.accessTokenExpiresIn || "15m"
               );
@@ -296,7 +275,6 @@ export function useAuthPersistence() {
                 data.refreshTokenExpiresIn || "7d"
               );
 
-              // Update cookies with correct expiry times
               Cookies.set("token", data.accessToken, {
                 ...cookieOptions,
                 expires: accessTokenExpiry,
@@ -306,20 +284,16 @@ export function useAuthPersistence() {
                 expires: refreshTokenExpiry,
               });
 
-              // Update store
               actions.updateTokens(data.accessToken, data.refreshToken);
 
-              // Set user if returned
               if (data.user) {
                 actions.setUser(data.user);
               }
 
-              // Update API headers
               api.defaults.headers.common[
                 "Authorization"
               ] = `Bearer ${data.accessToken}`;
 
-              // Reset attempt counter on success
               refreshAttempts = 0;
               console.log("✅ Session restore successful");
             } else {
@@ -328,7 +302,6 @@ export function useAuthPersistence() {
           } catch (error: any) {
             console.error("❌ Session restoration failed:", error);
 
-            // If rate limited or max attempts reached, clear everything
             if (
               error.message === "Rate limited" ||
               refreshAttempts >= MAX_REFRESH_ATTEMPTS
@@ -341,11 +314,9 @@ export function useAuthPersistence() {
               return;
             }
 
-            // For other errors, don't immediately redirect
             console.log("Session restore failed, but not clearing auth yet");
           }
         }
-        
       } finally {
         isRestoringRef.current = false;
       }

@@ -23,46 +23,59 @@ export default function EmbedPage() {
     if (ssoToken && ssoSignature) {
       console.log("[Embed] Auhtnenticating via websockets with SSO token");
       authenticateViaSocket(ssoToken, ssoSignature);
-      return;
-    }
-
-    // Fallback: check if already authenticated
-    if (isAuthenticated) {
+    } else if (isAuthenticated) {
       console.log("[Embed] Already authenticated");
       setIsInitializing(false);
-      return;
+    } else {
+      console.error("[Embed] No authentication method available");
+      setError("No authentication method available.");
+      setIsInitializing(false);
     }
-
-    // No auth method available
-    console.error("[Embed] No authentication method available");
-    setError("No authentication method available.");
-    setIsInitializing(false);
-  }, [isAuthenticated]);
+    // CLEANUP
+    return () => {
+      const socket = getSocket();
+      if (socket) {
+        socket.removeAllListeners();
+        socket.disconnect();
+      }
+    };
+  }, []);
 
   const authenticateViaSocket = async (token: string, signature: string) => {
     try {
-      const socket = getSocket();
-      if (socket?.connected) {
-        socket.disconnect();
+      console.log("🔧 [DEBUG] Starting socket authentication...");
+
+      const existingSocket = getSocket();
+      if (existingSocket) {
+        console.log("🔧 [DEBUG] Cleaning up existing socket");
+        existingSocket.removeAllListeners();
+        existingSocket.disconnect();
       }
 
-      // create news socket with SSO credentials
+      console.log("🔧 [DEBUG] Creating new socket with SSO credentials");
+
+      // Create socket
       const newSocket = connectSocket({
         ssoToken: token,
         ssoSignature: signature,
       });
 
-      // wait for authentication event
+      console.log("🔧 [DEBUG] Socket created, attaching listeners...");
+
+      // Set up timeout
       const authTimeout = setTimeout(() => {
-        setError("Authentication timed out");
+        console.log("❌ [DEBUG] Auth timeout fired");
+        setError("Authentication timeout");
         setIsInitializing(false);
-      }, 10000); // 10 seconds timeout
-      newSocket.once("authenticated", (data: any) => {
+        newSocket.disconnect(); // Clean up on timeout
+      }, 10000);
+
+      // Success handler
+      const handleAuthSuccess = (data: any) => {
         clearTimeout(authTimeout);
-        console.log("✅ [Embed] Socket authenticated", data);
+        console.log("✅ [DEBUG] AUTHENTICATED EVENT RECEIVED!", data);
 
         if (data.success && data.user) {
-          // Store tokens and user in auth store
           const tenant = {
             tenantId: data.user.tenantId || "",
             name: "",
@@ -70,6 +83,7 @@ export default function EmbedPage() {
             allowedOrigins: [],
             status: "verified" as const,
           };
+
           actions.login(
             {
               _id: data.user._id,
@@ -90,7 +104,6 @@ export default function EmbedPage() {
           setIsInitializing(false);
           setError(null);
 
-          // Notify parent (optional, for backward compatibility)
           window.parent.postMessage(
             {
               source: "chat-app",
@@ -104,15 +117,17 @@ export default function EmbedPage() {
             "*"
           );
         }
-      });
+      };
+
+      // Attach listeners
+      newSocket.once("authenticated", handleAuthSuccess);
 
       newSocket.once("connect_error", (err: Error) => {
         clearTimeout(authTimeout);
-        console.error("❌ [Embed] Socket connection error:", err);
+        console.error("❌ [DEBUG] CONNECT_ERROR EVENT RECEIVED!", err);
         setError(err.message || "Authentication failed");
         setIsInitializing(false);
 
-        // Notify parent of error
         window.parent.postMessage(
           {
             source: "chat-app",
@@ -123,8 +138,12 @@ export default function EmbedPage() {
           "*"
         );
       });
-    } catch (err: any) {
-      console.error("[Embed] Authentication error:", err);
+
+      console.log("🔧 [DEBUG] Listeners attached, NOW connecting socket...");
+      newSocket.connect();
+      console.log("🔧 [DEBUG] Socket connect() called, waiting for events...");
+    } catch (err) {
+      console.error("❌ [DEBUG] Exception in authenticateViaSocket:", err);
       setError(err instanceof Error ? err.message : "Authentication failed");
       setIsInitializing(false);
     }

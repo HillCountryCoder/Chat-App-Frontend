@@ -11,47 +11,61 @@ interface ConnectionOptions {
 }
 
 export const initializeSocket = (options?: ConnectionOptions): Socket => {
-  if (socket?.connected) {
+  // If SSO auth, always create a fresh socket
+  if (options?.ssoToken && options?.ssoSignature) {
+    console.log("🔧 [Socket] Creating fresh socket for SSO auth");
+
+    // Disconnect and cleanup old socket
+    if (socket) {
+      socket.removeAllListeners();
+      socket.disconnect();
+      socket = null;
+    }
+
+    socket = io(SOCKET_URL, {
+      autoConnect: false,
+      withCredentials: true,
+      auth: {
+        ssoToken: options.ssoToken,
+        ssoSignature: options.ssoSignature,
+      },
+    });
+
+    console.log("🔧 [Socket] Fresh socket created for SSO");
     return socket;
   }
 
-  const authConfig: any = {};
-  if (options?.ssoToken && options?.ssoSignature) {
-    authConfig.ssoToken = options.ssoToken;
-    authConfig.ssoSignature = options.ssoSignature;
-  } else {
-    // JWT token authentciation (fallback)
-    const token = useAuthStore.getState().token;
-    const tenantId = useAuthStore.getState().tenantId;
-    if (token) {
-      authConfig.token = token;
-      authConfig.tenantId = tenantId;
-    }
+  // For JWT auth, reuse existing socket if connected
+  if (socket?.connected) {
+    console.log("🔧 [Socket] Reusing existing connected socket");
+    return socket;
   }
+
+  // Create new JWT socket
+  console.log("🔧 [Socket] Creating new JWT socket");
+  const token = useAuthStore.getState().token;
+  const tenantId = useAuthStore.getState().tenantId;
+
   socket = io(SOCKET_URL, {
     autoConnect: false,
     withCredentials: true,
-    auth: authConfig,
+    auth: token ? { token, tenantId } : {},
   });
 
   socket.on("connect_error", (err) => {
     console.error("Socket connection error:", err.message);
-    // Don't auto-retry on auth errors - let the app handle token refresh
     if (!err.message.includes("Authentication")) {
       setTimeout(() => {
         socket?.connect();
       }, 5000);
     }
   });
+
   return socket;
 };
 
 export const connectSocket = (options?: ConnectionOptions): Socket => {
-  const socket = initializeSocket(options);
-  if (!socket.connected) {
-    socket.connect();
-  }
-  return socket;
+  return initializeSocket(options);
 };
 
 export const reconnectSocket = (): void => {
