@@ -5,55 +5,41 @@ const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
 
 let socket: Socket | null = null;
 
-interface ConnectionOptions {
+interface ConnectOptions {
   ssoToken?: string;
   ssoSignature?: string;
 }
 
-export const initializeSocket = (options?: ConnectionOptions): Socket => {
-  // If SSO auth, always create a fresh socket
-  if (options?.ssoToken && options?.ssoSignature) {
-    console.log("🔧 [Socket] Creating fresh socket for SSO auth");
-
-    // Disconnect and cleanup old socket
-    if (socket) {
-      socket.removeAllListeners();
-      socket.disconnect();
-      socket = null;
-    }
-
-    socket = io(SOCKET_URL, {
-      autoConnect: false,
-      withCredentials: true,
-      auth: {
-        ssoToken: options.ssoToken,
-        ssoSignature: options.ssoSignature,
-      },
-    });
-
-    console.log("🔧 [Socket] Fresh socket created for SSO");
-    return socket;
-  }
-
-  // For JWT auth, reuse existing socket if connected
+export const initializeSocket = (options?: ConnectOptions): Socket => {
   if (socket?.connected) {
-    console.log("🔧 [Socket] Reusing existing connected socket");
     return socket;
   }
 
-  // Create new JWT socket
-  console.log("🔧 [Socket] Creating new JWT socket");
-  const token = useAuthStore.getState().token;
-  const tenantId = useAuthStore.getState().tenantId;
+  const authConfig: any = {};
+
+  // SSO token authentication (WebSocket-first)
+  if (options?.ssoToken && options?.ssoSignature) {
+    authConfig.ssoToken = options.ssoToken;
+    authConfig.ssoSignature = options.ssoSignature;
+  } else {
+    // JWT token authentication (fallback)
+    const token = useAuthStore.getState().token;
+    const tenantId = useAuthStore.getState().tenantId;
+    if (token) {
+      authConfig.token = token;
+      authConfig.tenantId = tenantId;
+    }
+  }
 
   socket = io(SOCKET_URL, {
     autoConnect: false,
     withCredentials: true,
-    auth: token ? { token, tenantId } : {},
+    auth: authConfig,
   });
 
   socket.on("connect_error", (err) => {
     console.error("Socket connection error:", err.message);
+    // Don't auto-retry on auth errors
     if (!err.message.includes("Authentication")) {
       setTimeout(() => {
         socket?.connect();
@@ -64,8 +50,14 @@ export const initializeSocket = (options?: ConnectionOptions): Socket => {
   return socket;
 };
 
-export const connectSocket = (options?: ConnectionOptions): Socket => {
-  return initializeSocket(options);
+export const connectSocket = (options?: ConnectOptions): Socket => {
+  const socket = initializeSocket(options);
+
+  if (!socket.connected) {
+    socket.connect();
+  }
+
+  return socket;
 };
 
 export const reconnectSocket = (): void => {
