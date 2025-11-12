@@ -6,13 +6,11 @@ import { Loader2, AlertCircle } from "lucide-react";
 import ChatDashboard from "@/components/chat/ChatDashboard";
 import { Button } from "@/components/ui/button";
 import { connectSocket, getSocket } from "@/lib/socket";
-import { useRouter } from "next/navigation";
 
 export default function EmbedPage() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { isAuthenticated, actions } = useAuthStore();
-  const router = useRouter();
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
