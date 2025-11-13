@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { useAuthStore } from "@/store/auth-store";
 import { api } from "@/lib/api";
 import Cookies from "js-cookie";
 import { jwtDecode } from "jwt-decode";
 import { reconnectSocket } from "@/lib/socket";
 import { getExpiryDays } from "@/utils/date-utils";
+import { useAuthStore } from "@/store/auth-store";
 
 export const isTokenExpired = (token: string): boolean => {
   try {
@@ -23,14 +23,48 @@ export const isTokenExpired = (token: string): boolean => {
 // Detect if running in iframe
 const isInIframe = typeof window !== "undefined" && window !== window.parent;
 
-// Track refresh attempts to prevent infinite loops
+// Track refresh attempts
 let refreshAttempts = 0;
 const MAX_REFRESH_ATTEMPTS = 3;
 let lastRefreshAttempt = 0;
-const REFRESH_COOLDOWN = 60000; // 1 minute cooldown between attempts
+const REFRESH_COOLDOWN = 60000;
 
-// Iframe-specific tracking - use more specific flags
-let iframeInitialized = false;
+// Storage keys for iframe
+const IFRAME_TOKEN_KEY = "chat_access_token";
+const IFRAME_REFRESH_TOKEN_KEY = "chat_refresh_token";
+
+// Helper functions for iframe storage
+const setIframeToken = (token: string) => {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(IFRAME_TOKEN_KEY, token);
+    console.log("💾 [Iframe] Saved token to localStorage");
+  }
+};
+
+const setIframeRefreshToken = (refreshToken: string) => {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(IFRAME_REFRESH_TOKEN_KEY, refreshToken);
+    console.log("💾 [Iframe] Saved refreshToken to localStorage");
+  }
+};
+
+const getIframeToken = (): string | null => {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(IFRAME_TOKEN_KEY);
+};
+
+const getIframeRefreshToken = (): string | null => {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(IFRAME_REFRESH_TOKEN_KEY);
+};
+
+const clearIframeTokens = () => {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(IFRAME_TOKEN_KEY);
+    localStorage.removeItem(IFRAME_REFRESH_TOKEN_KEY);
+    console.log("🧹 [Iframe] Cleared tokens from localStorage");
+  }
+};
 
 export function useAuthPersistence() {
   const { token, refreshToken, isAuthenticated, _hasHydrated, actions } =
@@ -40,226 +74,155 @@ export function useAuthPersistence() {
   const cookieSyncRef = useRef(false);
   const sessionValidatedRef = useRef(false);
 
-  // Memoize cookie operations to prevent unnecessary re-runs
-  const syncTokensWithCookies = useCallback(() => {
-    // Prevent multiple sync operations
+  // Sync tokens to storage (cookies or localStorage)
+  const syncTokensWithStorage = useCallback(() => {
     if (cookieSyncRef.current) return;
     cookieSyncRef.current = true;
 
     try {
-      // Determine cookie options based on on Environment
-      const cookiesOptions = isInIframe
-        ? {
-            path: "/",
-            sameSite: "none" as const,
-            secure: true,
-            partitioned: true,
-          }
-        : {
-            path: "/",
-            sameSite: "lax" as const,
-            secure: process.env.NODE_ENV === "production",
-          };
-      // Regular cookie sync for standalone app
-      if (token) {
-        const cookieToken = Cookies.get("token");
-        if (!cookieToken) {
-          Cookies.set("token", token, {
-            ...cookiesOptions,
-            expires: 1 / 24 / 4, // 15 minutes
-          });
-          console.log(
-            `✅ Set token cookie with SameSite=${cookiesOptions.sameSite}`
-          );
+      if (isInIframe) {
+        // IFRAME: Use localStorage
+        if (token) {
+          setIframeToken(token);
+          api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+        } else {
+          delete api.defaults.headers.common["Authorization"];
         }
-        api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-      } else {
-        delete api.defaults.headers.common["Authorization"];
-      }
 
-      if (refreshToken) {
-        const cookieRefreshToken = Cookies.get("refreshToken");
-        if (!cookieRefreshToken) {
-          Cookies.set("refreshToken", refreshToken, {
-            ...cookiesOptions,
-            expires: 7,
-          });
+        if (refreshToken) {
+          setIframeRefreshToken(refreshToken);
         }
       } else {
-        Cookies.remove("refreshToken");
+        // STANDALONE: Use cookies
+        if (token) {
+          const cookieToken = Cookies.get("token");
+          if (!cookieToken) {
+            Cookies.set("token", token, {
+              expires: 1 / 24 / 4,
+              path: "/",
+              sameSite: "lax",
+              secure: window.location.protocol === "https:",
+            });
+            console.log("✅ Set token cookie (standalone)");
+          }
+          api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+        } else {
+          delete api.defaults.headers.common["Authorization"];
+        }
+
+        if (refreshToken) {
+          const cookieRefreshToken = Cookies.get("refreshToken");
+          if (!cookieRefreshToken) {
+            Cookies.set("refreshToken", refreshToken, {
+              expires: 7,
+              path: "/",
+              sameSite: "lax",
+              secure: window.location.protocol === "https:",
+            });
+            console.log("✅ Set refreshToken cookie (standalone)");
+          }
+        } else {
+          Cookies.remove("refreshToken");
+        }
       }
     } finally {
-      // Reset the flag after a brief delay
       setTimeout(() => {
         cookieSyncRef.current = false;
       }, 100);
     }
   }, [token, refreshToken]);
 
-  // Session restoration - SINGLE useEffect with proper dependencies
-  // Session restoration - SINGLE useEffect with proper dependencies
+  // Session restoration
   useEffect(() => {
-    // Prevent multiple restoration attempts
-    if (!_hasHydrated || isRestoringRef.current) {
-      return;
-    }
+    if (!_hasHydrated || isRestoringRef.current) return;
 
     const restoreSession = async () => {
       try {
         isRestoringRef.current = true;
 
-        const cookieToken = Cookies.get("token");
-        const cookieRefreshToken = Cookies.get("refreshToken");
+        // Get tokens from storage (iframe or cookies)
+        const storageToken = isInIframe
+          ? getIframeToken()
+          : Cookies.get("token");
+        const storageRefreshToken = isInIframe
+          ? getIframeRefreshToken()
+          : Cookies.get("refreshToken");
 
-        console.log("🔍 Auth restoration - Standalone app", {
-          hasCookieToken: !!cookieToken,
-          hasCookieRefreshToken: !!cookieRefreshToken,
-          hasStoreToken: !!token,
-          hasStoreRefreshToken: !!refreshToken,
-          isAuthenticated,
-        });
+        console.log(
+          `🔍 Auth restoration - ${isInIframe ? "Iframe" : "Standalone"}`,
+          {
+            hasStorageToken: !!storageToken,
+            hasStorageRefreshToken: !!storageRefreshToken,
+            hasStoreToken: !!token,
+            hasStoreRefreshToken: !!refreshToken,
+            isAuthenticated,
+          }
+        );
 
-        // Check if we have a token in store that hasn't expired
+        // Skip if already authenticated with valid token
         const hasNonExpiredToken = token && !isTokenExpired(token);
-        const shouldSkipRestoration = hasNonExpiredToken && isAuthenticated;
-
-        if (shouldSkipRestoration) {
+        if (hasNonExpiredToken && isAuthenticated) {
           console.log("✅ Already authenticated with valid token");
           return;
         }
 
-        // IFRAME STRATEGY: Be very conservative
-        // IFRAME STRATEGY: Allow refresh attempts
-        if (isInIframe) {
-          // Check if we have a valid access token in cookies
-          if (cookieToken && !isTokenExpired(cookieToken)) {
-            console.log("✅ Found valid access token in iframe, using it");
-            actions.setToken(cookieToken);
-
-            if (cookieRefreshToken && !refreshToken) {
-              actions.setRefreshToken(cookieRefreshToken);
-            }
-
-            api.defaults.headers.common[
-              "Authorization"
-            ] = `Bearer ${cookieToken}`;
-            return;
-          }
-
-          // If access token expired but refresh token exists, attempt refresh
-          if (
-            cookieRefreshToken &&
-            (!cookieToken || isTokenExpired(cookieToken))
-          ) {
-            console.log("🔄 [Iframe] Access token expired, attempting refresh");
-
-            try {
-              const response = await api.post("/auth/refresh", {
-                refreshToken: cookieRefreshToken,
-              });
-
-              if (response.status === 200 && response.data?.accessToken) {
-                const data = response.data;
-
-                const cookieOptions = {
-                  path: "/",
-                  sameSite: "none" as const,
-                  secure: true,
-                  partitioned: true,
-                };
-
-                const accessTokenExpiry = getExpiryDays(
-                  data.accessTokenExpiresIn || "15m"
-                );
-                const refreshTokenExpiry = getExpiryDays(
-                  data.refreshTokenExpiresIn || "7d"
-                );
-
-                Cookies.set("token", data.accessToken, {
-                  ...cookieOptions,
-                  expires: accessTokenExpiry,
-                });
-                Cookies.set("refreshToken", data.refreshToken, {
-                  ...cookieOptions,
-                  expires: refreshTokenExpiry,
-                });
-
-                actions.updateTokens(data.accessToken, data.refreshToken);
-
-                if (data.user) {
-                  actions.setUser(data.user);
-                }
-
-                api.defaults.headers.common[
-                  "Authorization"
-                ] = `Bearer ${data.accessToken}`;
-
-                console.log("✅ [Iframe] Token refresh successful");
-                return;
-              }
-            } catch (error: any) {
-              console.error("❌ [Iframe] Token refresh failed:", error);
-              // Fall through to logout
-            }
-          }
-
-          // No valid tokens available
+        // Restore tokens from storage if missing from store
+        if (!token && storageToken && !isTokenExpired(storageToken)) {
           console.log(
-            "⚠️ [Iframe] No valid tokens, requiring fresh authentication"
+            `♻️ Restoring tokens from ${
+              isInIframe ? "localStorage" : "cookies"
+            }`
           );
-          actions.logout();
-          return;
-        }
-
-        // Restore tokens from cookies if missing from store
-        if (!token && cookieToken && !isTokenExpired(cookieToken)) {
-          console.log("♻️ Restoring tokens from cookies");
-
           actions.updateTokens(
-            cookieToken,
-            cookieRefreshToken || refreshToken || ""
+            storageToken,
+            storageRefreshToken || refreshToken || ""
           );
-
           api.defaults.headers.common[
             "Authorization"
-          ] = `Bearer ${cookieToken}`;
+          ] = `Bearer ${storageToken}`;
           return;
         }
 
-        // Restore ONLY refresh token if missing
-        if (!refreshToken && cookieRefreshToken && token) {
-          console.log("♻️ Restoring refresh token from cookies");
-          actions.setRefreshToken(cookieRefreshToken);
+        // Restore refresh token only
+        if (!refreshToken && storageRefreshToken && token) {
+          console.log(
+            `♻️ Restoring refreshToken from ${
+              isInIframe ? "localStorage" : "cookies"
+            }`
+          );
+          actions.setRefreshToken(storageRefreshToken);
         }
 
-        // Check cooldown period for refresh attempts
+        // Token refresh logic
         const now = Date.now();
         if (now - lastRefreshAttempt < REFRESH_COOLDOWN) {
-          console.log("Refresh cooldown active, skipping restore attempt");
+          console.log("Refresh cooldown active");
           return;
         }
 
-        // Reset attempts if enough time has passed
         if (now - lastRefreshAttempt > REFRESH_COOLDOWN * 2) {
           refreshAttempts = 0;
         }
 
-        // Check if we've exceeded max attempts
         if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
-          console.error("Max refresh attempts exceeded, clearing auth");
-          Cookies.remove("token");
-          Cookies.remove("refreshToken");
+          console.error("Max refresh attempts exceeded");
+          if (isInIframe) {
+            clearIframeTokens();
+          } else {
+            Cookies.remove("token");
+            Cookies.remove("refreshToken");
+          }
           actions.logout();
-          window.location.href = "/login";
+          if (!isInIframe) window.location.href = "/login";
           return;
         }
 
-        // If we have refresh token and need to refresh
-        const availableRefreshToken = refreshToken || cookieRefreshToken;
+        // Attempt token refresh
+        const availableRefreshToken = refreshToken || storageRefreshToken;
         const needsRefresh =
           availableRefreshToken &&
           (!token || isTokenExpired(token)) &&
-          cookieRefreshToken;
+          storageRefreshToken;
 
         if (needsRefresh) {
           console.log("🔄 Attempting token refresh...");
@@ -274,42 +237,40 @@ export function useAuthPersistence() {
             if (response.status === 200 && response.data?.accessToken) {
               const data = response.data;
 
-              const cookieOptions = {
-                path: "/",
-                sameSite: "lax" as const,
-                secure: process.env.NODE_ENV === "production",
-              };
+              // Save to appropriate storage
+              if (isInIframe) {
+                setIframeToken(data.accessToken);
+                setIframeRefreshToken(data.refreshToken);
+              } else {
+                const accessTokenExpiry = getExpiryDays(
+                  data.accessTokenExpiresIn || "15m"
+                );
+                const refreshTokenExpiry = getExpiryDays(
+                  data.refreshTokenExpiresIn || "7d"
+                );
 
-              const accessTokenExpiry = getExpiryDays(
-                data.accessTokenExpiresIn || "15m"
-              );
-              const refreshTokenExpiry = getExpiryDays(
-                data.refreshTokenExpiresIn || "7d"
-              );
-
-              Cookies.set("token", data.accessToken, {
-                ...cookieOptions,
-                expires: accessTokenExpiry,
-              });
-              Cookies.set("refreshToken", data.refreshToken, {
-                ...cookieOptions,
-                expires: refreshTokenExpiry,
-              });
+                Cookies.set("token", data.accessToken, {
+                  expires: accessTokenExpiry,
+                  path: "/",
+                  sameSite: "lax",
+                  secure: process.env.NODE_ENV === "production",
+                });
+                Cookies.set("refreshToken", data.refreshToken, {
+                  expires: refreshTokenExpiry,
+                  path: "/",
+                  sameSite: "lax",
+                  secure: process.env.NODE_ENV === "production",
+                });
+              }
 
               actions.updateTokens(data.accessToken, data.refreshToken);
-
-              if (data.user) {
-                actions.setUser(data.user);
-              }
+              if (data.user) actions.setUser(data.user);
 
               api.defaults.headers.common[
                 "Authorization"
               ] = `Bearer ${data.accessToken}`;
-
               refreshAttempts = 0;
               console.log("✅ Session restore successful");
-            } else {
-              throw new Error(`Refresh failed with status: ${response.status}`);
             }
           } catch (error: any) {
             console.error("❌ Session restoration failed:", error);
@@ -318,15 +279,15 @@ export function useAuthPersistence() {
               error.message === "Rate limited" ||
               refreshAttempts >= MAX_REFRESH_ATTEMPTS
             ) {
-              console.log("Clearing auth due to rate limit or max attempts");
-              Cookies.remove("token");
-              Cookies.remove("refreshToken");
+              if (isInIframe) {
+                clearIframeTokens();
+              } else {
+                Cookies.remove("token");
+                Cookies.remove("refreshToken");
+              }
               actions.logout();
-              window.location.href = "/login";
-              return;
+              if (!isInIframe) window.location.href = "/login";
             }
-
-            console.log("Session restore failed, but not clearing auth yet");
           }
         }
       } finally {
@@ -335,14 +296,14 @@ export function useAuthPersistence() {
     };
 
     restoreSession();
-  }, [_hasHydrated]); // MINIMAL DEPENDENCIES - only trigger on hydration
+  }, [_hasHydrated]);
 
-  // Cookie sync - separate useEffect with stable dependencies
+  // Sync tokens to storage
   useEffect(() => {
-    syncTokensWithCookies();
-  }, [syncTokensWithCookies]);
+    syncTokensWithStorage();
+  }, [syncTokensWithStorage]);
 
-  // Session validation - only run once after successful auth
+  // Session validation
   useEffect(() => {
     if (sessionValidatedRef.current) return;
 
@@ -355,29 +316,22 @@ export function useAuthPersistence() {
           actions.setUser(response.data.user);
         } catch (error) {
           console.error("Session validation failed", error);
-          sessionValidatedRef.current = false; // Allow retry on next auth change
+          sessionValidatedRef.current = false;
         }
       }
     };
 
-    if (isInIframe) {
-      // Throttle validation for iframes
-      const timeout = setTimeout(validateSession, 1000);
-      return () => clearTimeout(timeout);
-    } else {
-      validateSession();
-    }
+    const timeout = setTimeout(validateSession, isInIframe ? 1000 : 0);
+    return () => clearTimeout(timeout);
   }, [token, isAuthenticated, actions]);
 
-  // Socket reconnection - minimal and non-interfering
+  // Socket reconnection
   useEffect(() => {
     if (token && isAuthenticated && !isInIframe) {
-      const timeout = setTimeout(() => {
-        reconnectSocket();
-      }, 100);
+      const timeout = setTimeout(() => reconnectSocket(), 100);
       return () => clearTimeout(timeout);
     }
-  }, [token && isAuthenticated]); // Combine conditions to reduce triggers
+  }, [token, isAuthenticated]);
 
   return {
     isAuthenticated,
@@ -397,3 +351,10 @@ export function getTokenRemainingTime(token: string): number {
     return 0;
   }
 }
+
+// Export helper to get token from iframe storage
+export const getTokenFromStorage = (): string | null => {
+  if (!isInIframe || typeof window === "undefined") return null;
+  const token = getIframeToken();
+  return token && !isTokenExpired(token) ? token : null;
+};
