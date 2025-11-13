@@ -47,16 +47,30 @@ export function useAuthPersistence() {
     cookieSyncRef.current = true;
 
     try {
+      // Determine cookie options based on on Environment
+      const cookiesOptions = isInIframe
+        ? {
+            path: "/",
+            sameSite: "none" as const,
+            secure: true,
+            partitioned: true,
+          }
+        : {
+            path: "/",
+            sameSite: "lax" as const,
+            secure: process.env.NODE_ENV === "production",
+          };
       // Regular cookie sync for standalone app
       if (token) {
         const cookieToken = Cookies.get("token");
         if (!cookieToken) {
           Cookies.set("token", token, {
+            ...cookiesOptions,
             expires: 1 / 24 / 4, // 15 minutes
-            path: "/",
-            sameSite: "lax",
-            secure: process.env.NODE_ENV === "production",
           });
+          console.log(
+            `✅ Set token cookie with SameSite=${cookiesOptions.sameSite}`
+          );
         }
         api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
       } else {
@@ -67,10 +81,8 @@ export function useAuthPersistence() {
         const cookieRefreshToken = Cookies.get("refreshToken");
         if (!cookieRefreshToken) {
           Cookies.set("refreshToken", refreshToken, {
+            ...cookiesOptions,
             expires: 7,
-            path: "/",
-            sameSite: "lax",
-            secure: process.env.NODE_ENV === "production",
           });
         }
       } else {
