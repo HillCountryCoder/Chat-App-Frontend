@@ -72,7 +72,7 @@ const clearAuthAndRedirect = () => {
     window.location.href = "/login";
   } else if (isInIframe) {
     console.log(
-      "🔄 [Iframe] Auth cleared, parent should handle re-authentication",
+      "🔄 [Iframe] Auth cleared, parent should handle re-authentication"
     );
     // Optionally notify parent
     window.parent.postMessage(
@@ -81,7 +81,7 @@ const clearAuthAndRedirect = () => {
         type: "AUTH_EXPIRED",
         timestamp: Date.now(),
       },
-      "*",
+      "*"
     );
   }
 };
@@ -125,7 +125,7 @@ api.interceptors.response.use(
       console.error(
         `❌ Rate limited in ${
           isInIframe ? "iframe" : "main app"
-        }. Stopping requests.`,
+        }. Stopping requests.`
       );
 
       // Set rate limit flag and timestamp
@@ -144,7 +144,7 @@ api.interceptors.response.use(
     // Don't attempt refresh if rate limited
     if (isRateLimited && Date.now() < rateLimitUntil) {
       console.log(
-        `Still rate limited in ${isInIframe ? "iframe" : "main app"}`,
+        `Still rate limited in ${isInIframe ? "iframe" : "main app"}`
       );
       clearAuthAndRedirect();
       return Promise.reject(new Error("Rate limited"));
@@ -162,21 +162,92 @@ api.interceptors.response.use(
       !isRateLimited
     ) {
       if (isInIframe) {
-        console.log("🚫 [Iframe] 401 error - checking localStorage token");
+        console.log("🚫 [Iframe] 401 error - attempting token refresh");
 
-        const storedToken = getTokenFromStorage();
-        if (storedToken) {
-          // Try one more time with stored token
-          console.log("🔄 [Iframe] Retrying with localStorage token");
-          originalRequest.headers.Authorization = `Bearer ${storedToken}`;
-          originalRequest._retry = true;
-          return api(originalRequest);
+        // If already in queue, wait for refresh
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+          })
+            .then((token) => {
+              if (token) {
+                originalRequest.headers.Authorization = `Bearer ${token}`;
+              }
+              return api(originalRequest);
+            })
+            .catch((err) => Promise.reject(err));
         }
 
-        // No valid token, clear auth
-        console.log("🚫 [Iframe] No valid token, clearing auth");
-        clearAuthAndRedirect();
-        return Promise.reject(error);
+        originalRequest._retry = true;
+        isRefreshing = true;
+
+        try {
+          // Try cookies first (legacy/fallback), then localStorage
+          let refreshToken = Cookies.get("refreshToken");
+          let storageType = "cookie";
+
+          if (!refreshToken && typeof window !== "undefined") {
+            refreshToken = localStorage.getItem("chat_refresh_token") ?? undefined;
+            storageType = "localStorage";
+          }
+
+          if (!refreshToken) {
+            console.log(
+              "🚫 [Iframe] No refresh token found in cookies or localStorage"
+            );
+            clearAuthAndRedirect();
+            return Promise.reject(error);
+          }
+
+          console.log(
+            `🔄 [Iframe] Attempting token refresh using ${storageType}...`
+          );
+
+          const response = await axios.post(`${API_URL}/api/auth/refresh`, {
+            refreshToken,
+          });
+
+          const { accessToken, refreshToken: newRefreshToken } = response.data;
+
+          // Always save to localStorage (primary storage for iframe)
+          if (typeof window !== "undefined") {
+            localStorage.setItem("chat_access_token", accessToken);
+            localStorage.setItem("chat_refresh_token", newRefreshToken);
+            console.log("💾 [Iframe] Saved new tokens to localStorage");
+          }
+
+          // Update Zustand store
+          useAuthStore
+            .getState()
+            .actions.updateTokens(accessToken, newRefreshToken);
+
+          console.log("✅ [Iframe] Token refresh successful");
+
+          // Process the queue
+          processQueue(null, accessToken);
+
+          // Retry the original request
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+          return api(originalRequest);
+        } catch (refreshError: any) {
+          console.error("❌ [Iframe] Token refresh failed:", refreshError);
+
+          // Check for rate limiting
+          if (refreshError.response?.status === 429) {
+            isRateLimited = true;
+            rateLimitUntil = Date.now() + 60000;
+          }
+
+          // Process queue with error
+          processQueue(refreshError, null);
+
+          // Clear auth
+          clearAuthAndRedirect();
+
+          return Promise.reject(refreshError);
+        } finally {
+          isRefreshing = false;
+        }
       }
 
       // MAIN APP STRATEGY: Attempt refresh (your existing logic)
@@ -253,7 +324,7 @@ api.interceptors.response.use(
       } catch (refreshError: any) {
         console.error(
           "❌ API Interceptor: Token refresh failed:",
-          refreshError,
+          refreshError
         );
 
         // Check if refresh failed due to rate limiting
@@ -277,11 +348,11 @@ api.interceptors.response.use(
 
     const appError = createErrorFromResponse(error);
     return Promise.reject(appError);
-  },
+  }
 );
 
 export async function apiRequest<T = any>(
-  config: AxiosRequestConfig,
+  config: AxiosRequestConfig
 ): Promise<T> {
   try {
     console.log("🔄 API requests making to backend SSO");
@@ -307,18 +378,4 @@ export const apiClient = {
     apiRequest<T>({ ...config, method: "PATCH", url, data }),
   delete: <T = any>(url: string, config?: AxiosRequestConfig) =>
     apiRequest<T>({ ...config, method: "DELETE", url }),
-};
-const getTokenFromStorage = (): string | null => {
-  if (!isInIframe || typeof window === "undefined") return null;
-
-  const token = localStorage.getItem("chat_access_token");
-  if (token && !isTokenExpired(token)) {
-    return token;
-  }
-
-  // Token expired or missing
-  if (token) {
-    localStorage.removeItem("chat_access_token");
-  }
-  return null;
 };
