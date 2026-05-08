@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, type MouseEvent } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { useDirectMessages } from "@/hooks/use-chat";
+import { useDirectMessages, useDeleteConversation } from "@/hooks/use-chat";
 import { useDirectMessageUsers } from "@/hooks/use-direct-message-users";
 import { useChannels } from "@/hooks/use-channels";
 import { Channel, DirectMessage, Message } from "@/types/chat";
 import { formatDistanceToNow } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageSquare, Hash } from "lucide-react";
+import { MessageSquare, Hash, Trash2, ChevronDown } from "lucide-react";
 import { EmptyState } from "./EmptyState";
 import { useAuthStore } from "@/store/auth-store";
 import { ChannelType } from "@/types/chat";
@@ -20,6 +20,13 @@ import { PresenceAwareAvatar } from "@/components/presence/PresenceAwareAvatar";
 import { useUserPresence } from "@/hooks/use-presence";
 import { useChatMessenger } from "@/providers/chat-messenger-provider";
 import { extractPlainText } from "@/utils/rich-text";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function ConversationList() {
   const {
@@ -44,6 +51,18 @@ export default function ConversationList() {
   const pathname = usePathname();
   const { user: currentUser } = useAuthStore();
   const { messenger, isReady } = useChatMessenger();
+  const deleteConversation = useDeleteConversation();
+
+  const handleDeleteChat = (e: MouseEvent<HTMLElement>, dmId: string) => {
+    e.stopPropagation();
+    deleteConversation.mutate(dmId, {
+      onSuccess: () => {
+        if (pathname === `/chat/dm/${dmId}`) {
+          router.push("/chat");
+        }
+      },
+    });
+  };
 
   // Get user IDs for presence tracking
   const dmUserIds = useMemo(() => {
@@ -102,7 +121,7 @@ export default function ConversationList() {
   const notifyParentApp = (
     message: Message,
     conversationType: "dm" | "channel",
-    conversationId: string
+    conversationId: string,
   ) => {
     // Don't notify for own messages or when messenger not ready
     if (!messenger || !isReady || message.senderId === currentUser?._id) {
@@ -138,7 +157,7 @@ export default function ConversationList() {
           sender: senderName,
           preview: message.content.substring(0, 30),
           unreadCount: currentUnreadCount,
-        }
+        },
       );
     }
   };
@@ -254,7 +273,7 @@ export default function ConversationList() {
             }
             return dm;
           });
-        }
+        },
       );
       queryClient.refetchQueries({
         queryKey: ["direct-messages"],
@@ -291,7 +310,7 @@ export default function ConversationList() {
             }
             return channel;
           });
-        }
+        },
       );
 
       // Still refetch in background to ensure consistency
@@ -391,7 +410,7 @@ export default function ConversationList() {
 
         if (process.env.NODE_ENV === "development") {
           console.log(
-            `[ConversationList] Marking ${conversationType} ${conversationId} as read`
+            `[ConversationList] Marking ${conversationType} ${conversationId} as read`,
           );
         }
 
@@ -460,7 +479,7 @@ export default function ConversationList() {
           conversations: unifiedConversations.length,
           withUnread: unifiedConversations.filter((c) => c.unreadCount > 0)
             .length,
-        }
+        },
       );
     }
   }, [unifiedConversations, messenger, isReady]);
@@ -487,7 +506,7 @@ export default function ConversationList() {
       ) {
         console.log(
           "[ConversationList] Conversation summary:",
-          conversationSummary
+          conversationSummary,
         );
       }
     }, 30000); // Every 30 seconds
@@ -546,16 +565,18 @@ export default function ConversationList() {
         return (
           <div
             key={`${conversation.type}-${conversation.id}`}
-            className={`p-4 hover:bg-accent cursor-pointer transition-colors ${
+            className={`group p-4 hover:bg-accent cursor-pointer transition-colors ${
               isActive ? "bg-accent" : ""
             }`}
-            onClick={() =>
-              conversation.type === "dm"
-                ? handleSelectDM(conversation.id)
-                : handleSelectChannel(conversation.id)
-            }
           >
-            <div className="flex items-center gap-3">
+            <div
+              className="flex items-center gap-3"
+              onClick={() =>
+                conversation.type === "dm"
+                  ? handleSelectDM(conversation.id)
+                  : handleSelectChannel(conversation.id)
+              }
+            >
               {conversation.type === "dm" ? (
                 <PresenceAwareAvatar
                   userId={conversation.userId || ""}
@@ -571,7 +592,7 @@ export default function ConversationList() {
                 </div>
               )}
 
-              <div className="flex justify-between min-w-0 w-[100%]">
+              <div className="flex justify-between min-w-0 flex-1">
                 <div className="flex flex-col justify-between items-start">
                   <h3 className="font-medium truncate flex items-center gap-2">
                     {conversation.name}
@@ -587,9 +608,41 @@ export default function ConversationList() {
                 </div>
 
                 <div className="flex flex-col-reverse items-end gap-2">
-                  {!isActive && conversation.unreadCount > 0 && (
-                    <UnreadBadge count={conversation.unreadCount} />
-                  )}
+                  <div className="flex items-center gap-2">
+                    {!isActive && conversation.unreadCount > 0 && (
+                      <UnreadBadge count={conversation.unreadCount} />
+                    )}
+                    {conversation.type === "dm" && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          asChild
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0 ml-1 opacity-0 translate-x-3 group-hover:opacity-100 group-hover:translate-x-0 data-[state=open]:opacity-100 data-[state=open]:translate-x-0 transition-all duration-100 ease-out group-hover:ease-in hover:cursor-pointer"
+                       
+                          >
+                            <ChevronDown className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={(e) =>
+                              handleDeleteChat(e, conversation.id)
+                            }
+                            disabled={deleteConversation.isPending}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete chat
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
+
                   <span className="text-xs text-muted-foreground">
                     {formatDistanceToNow(conversation.lastActivity, {
                       addSuffix: true,

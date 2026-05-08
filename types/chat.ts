@@ -81,6 +81,8 @@ export interface DirectMessage {
   participantIds: string[];
   lastActivity: string;
   lastMessage?: Message;
+  deletedBy?: string[];
+  deletedAt?: Record<string, string>;
 }
 
 export interface ChannelMember {

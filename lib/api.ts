@@ -19,6 +19,9 @@ export const api = axios.create({
   },
 });
 
+export const deleteDirectMessageConversation = (dmId: string) =>
+  api.delete(`/direct-messages/${dmId}`);
+
 // Helper function to convert duration strings to cookie expiry days
 const getExpiryDays = (duration: string): number => {
   if (duration === "15m") return 1 / 24 / 4; // 15 minutes in days

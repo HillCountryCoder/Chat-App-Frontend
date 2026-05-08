@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, deleteDirectMessageConversation } from "@/lib/api";
 import { useSocket } from "@/providers/socket-provider";
 import { DirectMessage, Message } from "@/types/chat";
 import { User } from "@/types/user";
@@ -160,6 +160,22 @@ export function useDirectMessage(id?: string) {
       return data as DirectMessage;
     },
     enabled: isAuthenticated && !!id,
+  });
+}
+
+export function useDeleteConversation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (dmId: string) => deleteDirectMessageConversation(dmId),
+    onSuccess: (_, dmId) => {
+      queryClient.setQueryData<DirectMessage[]>(["direct-messages"], (old) =>
+        old ? old.filter((dm) => dm._id !== dmId) : [],
+      );
+      queryClient.removeQueries({ queryKey: ["direct-message", dmId] });
+      queryClient.removeQueries({ queryKey: ["messages", "direct", dmId] });
+      queryClient.invalidateQueries({ queryKey: ["direct-messages"] });
+    },
   });
 }
 
